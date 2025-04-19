@@ -212,11 +212,19 @@ function debounce(func, wait) {
         const imageIndex = currentImageList.findIndex(item => item.name === imgData.name);
         const imageUrl = `images/${currentFolder}/${encodeURIComponent(imgData.name)}`;
 
-        img.src = imageUrl; 
+        const thumbSrc = imgData.thumb_path ? imgData.thumb_path : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // Placeholder if thumb fails
+        img.src = thumbSrc; 
         img.alt = imgData.name;
         img.loading = 'lazy';
         img.dataset.pswpIndex = imageIndex >= 0 ? imageIndex : undefined; // Store index
-        img.onerror = () => { img.alt = 'Lỗi tải ảnh'; img.style.display = 'none'; };
+        img.onerror = () => { 
+            console.warn(`[RenderGrid] Failed to load image/thumb: ${thumbSrc}`);
+            // Optionally try the original image if thumb fails, or just show placeholder
+            // img.src = imageUrl; // Uncomment to fallback to original if thumb fails (might be slow)
+            img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // Keep placeholder on error
+            img.alt = 'Lỗi tải ảnh xem trước'; 
+            // Keep div visible, maybe add an error icon/style?
+        };
 
         img.onclick = () => {
             if (imageIndex >= 0) {
@@ -244,7 +252,9 @@ function debounce(func, wait) {
               height: imgData.height || 0, // Use fetched height, default to 0 if missing
               alt: imgData.name
           })),
-          pswpModule: PhotoSwipe
+          pswpModule: PhotoSwipe,
+          // Custom UI Elements
+          appendToEl: document.body, // Default, but good to be explicit
       });
       photoswipeLightbox.init();
   }

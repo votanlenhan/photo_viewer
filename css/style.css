@@ -871,3 +871,22 @@ main.container {
         align-self: flex-end; 
     }
 }
+/* PhotoSwipe Download Button Style */
+.pswp__button--download-button {
+    background: none !important; /* Remove default background if needed */
+}
+
+.pswp__button--download-button svg {
+    /* Style the SVG icon */
+    fill: #FFF; /* White icon color */
+    width: 24px; /* Adjust size as needed */
+    height: 24px;
+    position: relative;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* Optional: Hover effect */
+.pswp__button--download-button:hover svg {
+    fill: #DDD; /* Lighter gray on hover */
+}

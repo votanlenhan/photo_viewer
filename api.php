@@ -618,10 +618,44 @@ switch ($action) {
             $images_metadata_for_page = [];
             foreach ($image_names_for_page as $image_name) {
                 $metadata = $all_images_metadata_cache[$image_name] ?? ['width' => 0, 'height' => 0]; // Use cached data, default if somehow missing
+                
+                // --- Thumbnail Generation/Retrieval Logic ---
+                $original_relative_path = (empty($safe_relative_path) ? '' : $safe_relative_path . '/') . $image_name;
+                $original_absolute_path = $full_path . DIRECTORY_SEPARATOR . $image_name;
+                $cache_hash = md5($original_relative_path);
+                $cache_filename = $cache_hash . '.jpg'; // Save thumbs as JPG
+                $thumbnail_relative_cache_path = 'cache/thumbnails/' . $cache_filename;
+                $thumbnail_absolute_cache_path = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $cache_filename;
+                $generated_thumb_path = null; // Initialize
+                $thumb_size = 750; // Desired thumbnail size (e.g., 750px width/height)
+
+                try { // Add try-catch around file operations
+                    if (file_exists($thumbnail_absolute_cache_path)) {
+                        $generated_thumb_path = $thumbnail_relative_cache_path;
+                        // error_log("[list_sub_items] Thumbnail cache hit for: {$original_relative_path}"); 
+                    } else {
+                        // Check if original exists and is readable before trying to create thumb
+                        if (is_readable($original_absolute_path)) {
+                            if (create_thumbnail($original_absolute_path, $thumbnail_absolute_cache_path, $thumb_size)) {
+                                $generated_thumb_path = $thumbnail_relative_cache_path;
+                                error_log("[list_sub_items] Created thumbnail for: {$original_relative_path} -> {$thumbnail_relative_cache_path}");
+                            } else {
+                                error_log("[list_sub_items] WARNING: Failed to create thumbnail for: {$original_relative_path} (create_thumbnail returned false)");
+                            }
+                        } else {
+                             error_log("[list_sub_items] WARNING: Original image not readable, cannot create thumbnail: {$original_absolute_path}");
+                        }
+                    }
+                } catch (Throwable $thumb_error) {
+                     error_log("[list_sub_items] ERROR during thumbnail check/creation for {$original_relative_path}: " . $thumb_error->getMessage());
+                }
+                // --- End Thumbnail Logic ---
+                
                 $images_metadata_for_page[] = [
                     'name' => $image_name,
                     'width' => $metadata['width'],
-                    'height' => $metadata['height']
+                    'height' => $metadata['height'],
+                    'thumb_path' => $generated_thumb_path
                 ];
             }
             
