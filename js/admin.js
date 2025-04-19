@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminMessageDiv = document.getElementById('admin-message');
 
     // --- Configuration ---
-    const API_URL = 'api.php'; // API endpoint
+    const API_URL = 'api.php'; // API endpoint haha
 
     // --- Utility Functions ---
     function escapeHTML(str) {
