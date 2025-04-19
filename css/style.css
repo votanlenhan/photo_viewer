@@ -1,0 +1,873 @@
+/* --- Reset & Base Dark Theme --- */
+* { box-sizing: border-box; margin:0; padding:0; }
+html { scroll-behavior: smooth; } /* Cuộn mượt */
+html, body { height: 100%; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    background-color: #010409; /* Darker GitHub background */
+    color: #e6edf3; /* GitHub Dark Text */
+    line-height: 1.6;
+    font-size: 16px; /* Base font size */
+    display: flex;
+    flex-direction: column;
+}
+a { color: #58a6ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; height: auto; display: block; } /* Responsive images */
+
+.container { max-width:1200px; margin:0 auto; padding:20px 24px; } /* Tăng max-width */
+@media (max-width: 1200px) { .container { padding: 15px; } }
+
+h1 { font-size: clamp(1.8rem, 5vw, 2.4rem); color:#f0f6fc; margin-bottom: 20px; font-weight: 600;} /* Responsive H1 */
+h2 {
+    font-size: clamp(1.3rem, 4vw, 1.6rem); /* Responsive H2 */
+    border-bottom:1px solid #30363d; /* GitHub Dark Border */
+    padding-bottom:10px;
+    margin-bottom:24px;
+    color:#c9d1d9;
+    font-weight: 500;
+}
+ul { list-style:none; padding:0; margin:0; }
+p { margin-bottom: 1rem; }
+
+/* --- Buttons --- */
+.button, button {
+    display: inline-block;
+    padding: 9px 18px; /* Điều chỉnh padding */
+    font-size: 0.95em;
+    font-weight: 500;
+    color: #c9d1d9; /* Màu chữ mặc định */
+    background-color: #21262d; /* Nền nút tối */
+    border: 1px solid #30363d; /* Viền nút */
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease;
+    white-space: nowrap;
+}
+.button:hover, button:hover {
+    background-color: #30363d; /* Sáng hơn khi hover */
+    border-color: #8b949e; /* Viền sáng hơn khi hover */
+    color: #f0f6fc;
+    text-decoration: none;
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.1); /* Shadow nhẹ khi hover */
+}
+button:disabled, .button:disabled {
+    background-color: #21262d;
+    border-color: #30363d;
+    color: #8b949e; /* Mờ đi */
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.download-all { background-color: #238636; border-color: #2ea043; color: #fff;} /* Nút tải zip (xanh lá) */
+.download-all:hover { background-color: #2ea043; border-color: #3fb950; }
+
+
+/* --- Search Bar --- */
+.search-container { margin-bottom:24px; }
+#searchInput {
+    width:100%; padding:11px 14px;
+    background:#161b22; border:1px solid #30363d; border-radius:6px;
+    color:#e6edf3; font-size: 1em;
+    box-sizing: border-box;
+}
+#searchInput:focus {
+    outline:none; border-color:#58a6ff;
+    box-shadow:0 0 0 3px rgba(88,166,255,0.15);
+}
+#searchInput::placeholder { color: #8b949e; }
+
+
+/* --- Folder List (Homepage & Inside Folder) --- */
+.directory-list-styling {
+    list-style:none; padding:0; margin:0 0 24px 0;
+    display: grid; /* Có thể dùng Grid để bố cục tốt hơn */
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* Responsive grid */
+    gap: 16px; /* Khoảng cách giữa các thư mục */
+}
+.directory-list-styling li {
+    /* Các style cũ của li không cần nữa vì thẻ a chiếm hết */
+}
+.directory-list-styling li a { /* Thẻ a là card thư mục */
+    display: flex; align-items: center;
+    padding: 12px 14px;
+    background:#161b22; border:1px solid #30363d; border-radius:6px;
+    transition: background 0.2s, transform 0.15s, box-shadow 0.15s;
+    color: #c9d1d9; /* Màu chữ mặc định */
+    overflow: hidden; /* Tránh text tràn ra */
+}
+.directory-list-styling li a:hover {
+    background:#21262d; transform:translateY(-2px);
+    border-color: #404854;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    text-decoration: none;
+    color: #f0f6fc; /* Chữ sáng hơn khi hover */
+}
+
+.folder-thumbnail {
+    width: 56px; /* Giảm kích thước thumbnail */
+    height: 56px;
+    object-fit: cover; border-radius: 4px; /* Bo tròn ít hơn */
+    margin-right: 14px; background:#21262d;
+    border: 1px solid #30363d;
+    flex-shrink: 0;
+}
+/* CSS cho ảnh placeholder nếu cần */
+img[src=""] { background-color: #21262d; }
+img[src$=".svg"] { /* Nếu dùng SVG placeholder */
+    padding: 5px; /* Thêm padding cho SVG */
+}
+
+.directory-list-styling span { /* Tên thư mục */
+    font-size:1em; font-weight:500;
+    line-height: 1.4;
+    /* Tránh tràn text */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* CSS cho thông báo không tìm thấy kết quả */
+#directory-list .no-results {
+    grid-column: 1 / -1; /* Chiếm toàn bộ grid */
+    text-align: center; padding: 30px; color: #8b949e; font-style: italic;
+    background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+}
+
+
+/* --- Masonry Image Section --- */
+#image-grid { /* Container chung cho thư mục con và ảnh */
+    margin-top: 20px;
+}
+.image-group { /* Container riêng cho ảnh masonry */
+    margin-top: 24px; /* Khoảng cách với thư mục con nếu có */
+    column-count: 2; column-gap: 16px;
+}
+/* Responsive columns */
+@media(min-width: 600px) { .image-group{ column-count: 3; } }
+@media(min-width: 900px) { .image-group{ column-count: 4; } }
+@media(min-width: 1200px){ .image-group{ column-count: 5; } } /* Thêm cột cho màn hình lớn */
+
+.image-item { /* Wrapper cho mỗi ảnh */
+    break-inside: avoid; 
+    margin-bottom: 16px; 
+    position: relative; 
+    overflow: hidden; /* Keep for border-radius */
+    border-radius: 6px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    /* Ensure item height is determined by content */
+    height: auto; 
+    line-height: 0; /* Prevent extra space issues */
+}
+.image-item:hover {
+    transform: scale(1.02); /* Phóng to nhẹ khi hover */
+    box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+}
+
+.image-item img {
+    width: 100%;      /* Fit item width */
+    height: auto;     /* Height determined by aspect ratio */
+    /* object-fit: cover; /* Revert this, height:auto should handle aspect ratio */ 
+    object-fit: contain; /* Or use contain to ensure it fits if constrained */
+    object-position: center; 
+    border-radius: 6px; 
+    display: block;
+    background: #161b22; 
+    border: 1px solid #30363d;
+}
+
+/* --- Divider giữa thư mục con và ảnh --- */
+.folder-image-divider {
+    border:none; border-top:1px solid #30363d;
+    margin: 30px 0; /* Tăng khoảng cách */
+}
+
+/* --- Preview Overlay --- */
+.preview-overlay {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    background:rgba(0,0,0,0.9);
+    display:flex; justify-content:center; align-items:center;
+    z-index:1000; padding:10px; /* Ensure padding doesn't prevent full height/width usage */
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent; /* Tắt highlight khi chạm trên mobile */
+}
+.preview-wrapper {
+    position:relative;
+    /* Use viewport units for max dimensions, subtracting padding */
+    max-width: calc(100vw - 20px); 
+    max-height: calc(100vh - 20px);
+    display: flex; 
+    justify-content: center; 
+    align-items: center;
+}
+
+/* REMOVED custom styles for the preview image inside the wrapper. */
+/* Let PhotoSwipe handle its own image styling. */
+/* 
+.preview-wrapper img#previewImage {
+    max-width: 100%; 
+    max-height: 100%; 
+    width: auto;     
+    height: auto;    
+    object-fit: contain; 
+    display: block; 
+    will-change: transform, opacity;
+}
+*/
+
+.preview-wrapper img.sliding { transition:none; } /* Tắt transition khi đang kéo */
+
+.nav-btn {
+    position:absolute; top:50%; transform:translateY(-50%);
+    font-size:2.5rem; /* Tăng kích thước icon */
+    background:rgba(22, 27, 34, 0.6); /* Nền tối hơn */
+    color:#f0f6fc; border:none; padding:10px 16px;
+    cursor:pointer; z-index:1001; font-weight:bold;
+    border-radius:8px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    opacity: 0.7; /* Mặc định hơi mờ */
+}
+.nav-btn:hover { background:rgba(33, 38, 45, 0.8); opacity: 1; transform: translateY(-50%) scale(1.05); }
+#prevBtn { left:5px; } /* Sát viền hơn */
+#nextBtn { right:5px; }
+
+.close-preview {
+    position:absolute; top:15px; right:20px; /* Gần góc hơn */
+    font-size:30px; color:#f0f6fc; cursor:pointer;
+    font-weight: lighter;
+    padding: 5px; line-height: 1;
+    background: rgba(22, 27, 34, 0.5);
+    border-radius: 50%;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+.close-preview:hover { transform: scale(1.1); background: rgba(33, 38, 45, 0.8); }
+
+/* Slide animation (keyframes giữ nguyên) */
+.slide-left  { animation:slideLeft 0.3s ease forwards; } /* Thêm forwards */
+.slide-right { animation:slideRight 0.3s ease forwards; }
+@keyframes slideLeft {
+    0% { transform: translateX(-50px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideRight {
+    0% { transform: translateX(50px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+}
+
+/* --- Download Preview Button --- */
+.download-preview-btn {
+    position:absolute; bottom:25px; left:50%; /* Nút tải ở dưới */
+    transform:translateX(-50%);
+    background:#1f6feb; color:#fff;
+    padding:10px 18px; font-size:1em; /* Tăng padding */
+    border-radius:6px; text-decoration:none;
+    box-shadow:0 4px 10px rgba(0,0,0,0.4);
+    z-index:1001;
+    opacity: 0.9;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+.download-preview-btn:hover { background:#388bfd; opacity: 1; }
+
+
+/* --- Password Prompt Overlay Styling --- */
+.password-prompt-overlay {
+    /* Kế thừa từ style.css cũ, có thể điều chỉnh nếu cần */
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(13, 17, 23, 0.85); /* Nền tối hơn */
+    display: flex; justify-content: center; align-items: center;
+    z-index: 1001; padding: 20px; box-sizing: border-box;
+}
+.password-prompt-box {
+    background: #161b22; /* Nền box tối */
+    padding: 30px 35px; border-radius: 8px;
+    border: 1px solid #30363d;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    text-align: center; width: 100%; max-width: 400px; /* Rộng hơn chút */
+    color: #c9d1d9; /* Chữ trong box */
+}
+.password-prompt-box h3 { margin-top: 0; margin-bottom: 15px; font-size: 1.4em; color: #f0f6fc; }
+.password-prompt-box p { margin-bottom: 20px; font-size: 1em; line-height: 1.5; }
+.password-prompt-box p strong { color: #58a6ff; }
+.password-prompt-box input[type="password"] {
+    width: 100%; padding: 11px 14px; margin-bottom: 20px;
+    border: 1px solid #30363d; border-radius: 6px;
+    background-color: #0d1117; color: #e6edf3; font-size: 1em; box-sizing: border-box;
+}
+.password-prompt-box input:focus {
+     outline: none; border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+.password-prompt-box .prompt-actions { display: flex; justify-content: center; gap: 15px; margin-top: 20px; }
+.password-prompt-box .prompt-actions button { padding: 10px 20px; min-width: 110px; }
+.password-prompt-box .error-message {
+    color: #f85149; font-size: 0.9em; margin-top: -10px; margin-bottom: 15px;
+    min-height: 1.2em; text-align: left;
+}
+
+/* --- General Helper Classes --- */
+.hidden { display: none; }
+
+/* --- Header Styles --- */
+.app-header {
+    background-color: #161b22;
+    border-bottom: 1px solid #21262d; /* Slightly softer border */
+    padding: 12px 0; 
+    position: sticky; /* Make header sticky */
+    top: 0;
+    z-index: 900; /* Below overlays */
+    flex-shrink: 0; /* Prevent header from shrinking */
+}
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px; /* Add gap between logo and actions */
+}
+.logo-link { 
+    text-decoration: none; 
+    display: inline-block; 
+}
+#site-logo {
+    max-height: 40px; /* Default max height */
+    width: auto;
+    vertical-align: middle; 
+}
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.back-button {
+    /* Refine back button style */
+    padding: 6px 12px;
+    font-size: 0.9em;
+}
+
+/* --- Main Content Area --- */
+main.container {
+    flex: 1 0 auto; /* Allow main content to grow and push footer down */
+    /* Remove fixed min-height if previously set */
+}
+
+/* --- Directory View (Homepage Improvements) --- */
+#directory-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    gap: 50px; /* Consistent large gap */
+    width: 100%; /* Ensure it takes width for centering */
+}
+
+/* Make search-container control its own width */
+.search-container {
+    width: 100%;
+    max-width: 680px; /* Slightly adjusted */
+    margin: 0 auto; /* Ensure centering */
+}
+
+/* Optional search heading style */
+.search-heading {
+     font-size: 1.5em;
+     font-weight: 600; /* Bolder */
+     color: #e6edf3; /* Brighter color */
+     margin-bottom: 18px;
+     text-align: center;
+}
+
+#searchInput {
+    width:100%; 
+    padding: 14px 20px; /* Refined padding */
+    background:#0d1117; 
+    border:1px solid #30363d; 
+    border-radius:6px;
+    color:#e6edf3; 
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.search-prompt {
+    font-size: 0.9em;
+    color: #8b949e;
+    text-align: center;
+    margin-top: 12px; 
+}
+
+/* --- Redesigned Directory List (Cards) --- */
+#directory-list {
+    width: 100%;
+    max-width: 1050px; /* Slightly narrower */
+    margin: 0 auto; 
+}
+
+.directory-list-styling {
+    display: grid; 
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); /* Increased min width */
+    gap: 22px; /* Slightly adjusted gap */
+}
+
+.directory-list-styling li { }
+
+.directory-list-styling li a {
+    display: flex; 
+    align-items: center; 
+    background: #161b22; 
+    border: 1px solid #30363d; 
+    border-radius: 8px; 
+    padding: 14px; /* Adjusted padding */
+    gap: 14px; /* Adjusted gap */
+    transition: background-color 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+    color: #c9d1d9; 
+    overflow: hidden; 
+    text-decoration: none;
+}
+
+.directory-list-styling li a:hover {
+    background: #21262d; 
+    border-color: #58a6ff;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    color: #e6edf3;
+    text-decoration: none;
+}
+
+.folder-thumbnail {
+    width: 50px; /* Adjusted size */
+    height: 50px;
+    object-fit: cover; 
+    border-radius: 6px; 
+    /* margin-right: 12px; /* Removed, using gap now */
+    background:#0d1117; 
+    border: 1px solid #21262d; /* Softer border */
+    flex-shrink: 0;
+}
+
+.directory-list-styling span { 
+    font-size: 1.05em; /* Slightly larger */
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: normal;
+    overflow: hidden;
+    color: #e6edf3; /* Ensure consistent text color */
+}
+
+/* --- Responsive for Redesign --- */
+@media (max-width: 768px) {
+    main.container.user-view { 
+        padding: 40px 15px; 
+    }
+     #directory-view {
+        gap: 40px; 
+    }
+    #directory-list {
+        max-width: 95%; /* Use percentage */
+    }
+    .directory-list-styling {
+        grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); 
+        gap: 18px;
+    }
+}
+
+@media (max-width: 480px) {
+     #directory-view {
+        gap: 30px; 
+    }
+    .search-heading {
+        font-size: 1.3em;
+    }
+    #searchInput {
+        padding: 12px 16px; /* Adjust mobile padding */
+        font-size: 0.95rem;
+        line-height: 1.4; /* Adjust line height */
+    }
+    .search-prompt {
+        font-size: 0.85em;
+    }
+    .directory-list-styling {
+        grid-template-columns: 1fr; /* Single column */
+        gap: 15px;
+    }
+     .directory-list-styling li a {
+        padding: 12px;
+        gap: 12px;
+    }
+    .folder-thumbnail {
+        width: 50px;
+        height: 50px;
+    }
+    .directory-list-styling span {
+        font-size: 1em;
+    }
+    .app-footer { font-size: 0.8em; }
+     /* Force single column for directory list on very small screens */
+     .directory-list-styling {
+        grid-template-columns: 1fr; /* Single column */
+        gap: 10px;
+    }
+     .search-container.google-style {
+         margin-bottom: 15px;
+     }
+     #searchInput {
+         padding: 12px 18px; /* Further reduced padding */
+         font-size: 0.9rem; /* Further reduced font size */
+         border-radius: 20px;
+     }
+     .search-prompt {
+         font-size: 0.8rem;
+     }
+     .search-section {
+         padding: 20px 15px;
+         border-radius: 8px;
+         margin-bottom: 30px;
+     }
+     .directory-list-styling {
+        gap: 8px; /* Reduce gap */
+    }
+}
+
+/* --- Footer Styles --- */
+.app-footer {
+    background-color: #0d1117; /* Match body */
+    border-top: 1px solid #21262d; /* Softer border */
+    padding: 20px 0; 
+    margin-top: 50px; 
+    text-align: center;
+    font-size: 0.9em;
+    color: #8b949e;
+    flex-shrink: 0; /* Prevent footer from shrinking */
+}
+.footer-container p {
+    margin-bottom: 5px; /* Space between lines */
+}
+.footer-contact {
+    font-size: 0.9em;
+}
+
+/* --- PhotoSwipe Customizations --- */
+.pswp__bg { background: rgba(10, 10, 15, 0.97); } /* Even darker */
+.pswp__button {
+    background-color: rgba(25, 30, 35, 0.6) !important; /* Example: Custom button background */
+    border-radius: 4px;
+}
+.pswp__button:hover {
+    background-color: rgba(40, 45, 50, 0.8) !important;
+}
+/* Adjust download button position if needed (part of PhotoSwipe UI) */
+.pswp__button--download {
+    /* Add specific styles if needed */
+}
+
+/* --- Responsive Adjustments --- */
+@media (max-width: 768px) {
+    .header-container {
+        flex-wrap: wrap; 
+        row-gap: 10px; /* Add gap when items wrap to new line */
+    }
+    #site-logo {
+        max-height: 35px; /* Slightly smaller logo on medium screens */
+    }
+    #searchInput {
+        padding: 12px 20px;
+        font-size: 1rem;
+    }
+    .image-view-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .image-view-actions {
+        width: 100%; 
+        justify-content: space-between; 
+    }
+    .image-group {
+         column-count: 2; 
+    }
+     /* Ensure directory list adapts */
+     .directory-list-styling {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); /* Slightly smaller min */
+        gap: 12px;
+    }
+    .search-section {
+        padding: 25px 20px;
+        max-width: 95%; /* Adjust max-width */
+    }
+     .directory-list-styling {
+        max-width: 95%; /* Adjust max-width */
+    }
+}
+
+@media (max-width: 480px) {
+    #site-logo {
+        max-height: 30px; /* Even smaller logo on small screens */
+    }
+    .image-group {
+        column-count: 1; 
+        column-gap: 0;
+    }
+    .image-item { margin-bottom: 8px; }
+    .folder-thumbnail { width: 40px; height: 40px; margin-right: 10px;}
+    .directory-list-styling li a { padding: 10px 12px; }
+    .directory-list-styling span { font-size: 0.95em; }
+    .app-footer { font-size: 0.8em; }
+     /* Force single column for directory list on very small screens */
+     .directory-list-styling {
+        grid-template-columns: 1fr; /* Single column */
+        gap: 10px;
+    }
+     .search-container.google-style {
+         margin-bottom: 15px;
+     }
+     #searchInput {
+         padding: 12px 18px; /* Further reduced padding */
+         font-size: 0.9rem; /* Further reduced font size */
+         border-radius: 20px;
+     }
+     .search-prompt {
+         font-size: 0.8rem;
+     }
+     .search-section {
+         padding: 20px 15px;
+         border-radius: 8px;
+         margin-bottom: 30px;
+     }
+     .directory-list-styling {
+        gap: 8px; /* Reduce gap */
+    }
+}
+
+/* --- Admin Page Specific Styles --- */
+/* (Keep existing admin table styles etc.) */
+
+/* Style the admin search container */
+.search-container.admin-search {
+    width: 100%;
+    max-width: 550px; /* Adjust max width as needed for admin */
+    margin: 30px auto 20px auto; /* Center with top/bottom margin */
+}
+
+/* Style the admin search input like the main search */
+#adminSearchInput {
+    width:100%; 
+    padding: 12px 16px; /* Consistent padding */
+    background:#0d1117; 
+    border:1px solid #30363d; 
+    border-radius:6px;
+    color:#e6edf3; 
+    font-size: 1rem;
+    line-height: 1.5;
+    box-sizing: border-box; /* Ensure padding is included in width */
+}
+#adminSearchInput:focus {
+    outline:none; 
+    border-color:#58a6ff;
+    box-shadow:0 0 0 3px rgba(88,166,255,0.15);
+}
+#adminSearchInput::placeholder { 
+    color: #8b949e; 
+}
+
+/* Style the optional admin prompt */
+.search-prompt.admin-prompt {
+    /* Inherits base .search-prompt styles */
+    text-align: center;
+    /* Override styles if needed, e.g., margin */
+    margin-top: 8px; 
+    font-size: 0.85em;
+}
+
+/* ========================================= */
+/* === ADMIN PAGE SPECIFIC STYLES       === */
+/* ========================================= */
+
+/* Container */
+.container.admin-view { 
+    max-width: 1000px; 
+}
+
+/* Header */
+.admin-view .header { /* Scoped to admin-view */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #30363d; 
+}
+.admin-view .header h1 { 
+    margin: 0; 
+    color: #f0f6fc; 
+}
+.admin-view .logout-link { /* Scoped to admin-view */
+    background-color: #b62324; 
+    border-color: #cb2a2a;
+    font-size: 0.9em;
+    padding: 8px 14px;
+}
+.admin-view .logout-link:hover { 
+    background-color: #da3633; 
+    border-color: #e9403c; 
+}
+
+/* Admin Search */
+.search-container.admin-search {
+    width: 100%;
+    max-width: 550px; 
+    margin: 30px auto 20px auto; 
+}
+#adminSearchInput {
+    width:100%; 
+    padding: 12px 16px; 
+    background:#0d1117; 
+    border:1px solid #30363d; 
+    border-radius:6px;
+    color:#e6edf3; 
+    font-size: 1rem;
+    line-height: 1.5;
+    box-sizing: border-box; 
+}
+#adminSearchInput:focus {
+    outline:none; 
+    border-color:#58a6ff;
+    box-shadow:0 0 0 3px rgba(88,166,255,0.15);
+}
+#adminSearchInput::placeholder { 
+    color: #8b949e; 
+}
+.search-prompt.admin-prompt {
+    text-align: center;
+    margin-top: 8px; 
+    font-size: 0.85em;
+}
+
+/* Admin Message Box */
+.admin-view .message { 
+    padding: 12px 18px; 
+    margin-bottom: 20px; 
+    border-radius: 6px;
+    border: 1px solid transparent; 
+    font-size: 0.95em;
+}
+.admin-view .message.success { 
+    background-color: rgba(46, 160, 67, 0.15); 
+    color: #3fb950; 
+    border-color: rgba(46, 160, 67, 0.3); 
+}
+.admin-view .message.error { 
+    background-color: rgba(218, 54, 51, 0.15); 
+    color: #f85149; 
+    border-color: rgba(218, 54, 51, 0.3); 
+}
+
+/* Admin Table */
+.admin-view table { 
+    width: 100%;
+    border-collapse: collapse; 
+    margin-top: 25px;
+    font-size: 0.95em;
+}
+.admin-view th, 
+.admin-view td {
+    padding: 12px 15px; 
+    border: 1px solid #30363d; 
+    text-align: left;
+    vertical-align: middle; 
+    color: #c9d1d9; 
+}
+.admin-view th {
+    background-color: #161b22; 
+    color: #f0f6fc; 
+    font-weight: 600; 
+}
+.admin-view .status-protected { 
+    color: #3fb950; 
+    font-weight: bold; 
+}
+.admin-view .status-unprotected { 
+    color: #8b949e; 
+}
+
+/* Inputs/Forms inside table */
+.admin-view td input[type="text"] { 
+     width: 100%;
+     padding: 6px 8px;
+     background:#0d1117; 
+     border:1px solid #30363d; 
+     border-radius:4px;
+     color:#c9d1d9; 
+     font-size: 0.9em;
+     cursor: pointer; 
+}
+.admin-view td .action-form { 
+    display: flex;
+    align-items: center;
+    gap: 8px; 
+}
+.admin-view td .action-form input[type="password"] {
+    flex-grow: 1; 
+    padding: 8px 10px;
+    background:#0d1117; 
+    border:1px solid #30363d; 
+    border-radius:4px;
+    color:#c9d1d9; 
+    font-size: 0.9em;
+}
+.admin-view td .action-form input:focus {
+    outline: none; 
+    border-color: #58a6ff;
+    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+.admin-view td .action-form button {
+    padding: 7px 12px;
+    font-size: 0.9em;
+    white-space: nowrap; 
+    flex-shrink: 0; 
+}
+.admin-view .set-button { 
+    background-color: #1f6feb; 
+    border-color: #388bfd; 
+}
+.admin-view .set-button:hover { 
+    background-color: #388bfd; 
+    border-color: #58a6ff; 
+}
+.admin-view .remove-button { 
+    background-color: #b62324; 
+    border-color: #cb2a2a; 
+}
+.admin-view .remove-button:hover { 
+    background-color: #da3633; 
+    border-color: #e9403c; 
+}
+
+/* Loading/Empty Table Row */
+.admin-view #folder-list-body td[colspan="6"] { /* Adjusted colspan */
+    text-align: center; 
+    color: #8b949e; 
+    padding: 30px; 
+    font-style: italic;
+}
+
+/* Responsive Admin Styles */
+@media (max-width: 768px) { 
+    .admin-view th, 
+    .admin-view td { 
+        padding: 8px 10px; 
+        font-size: 0.9em;
+    }
+    .admin-view td .action-form { 
+        flex-direction: column; 
+        align-items: stretch; 
+        gap: 5px;
+    }
+    .admin-view td .action-form input[type="password"] { 
+        width: 100%; 
+    }
+    .admin-view td .action-form button { 
+        width: 100%; 
+    }
+    .admin-view .header { 
+        flex-direction: column; 
+        align-items: flex-start; 
+        gap: 10px;
+    }
+    .admin-view .logout-link { 
+        align-self: flex-end; 
+    }
+}

@@ -1,0 +1,12 @@
+RewriteEngine On
+
+# Chặn truy cập trực tiếp vào file cấu hình và CSDL
+RewriteRule ^(db_connect\.php|database\.sqlite|php-error\.log)$ - [F,L,NC]
+
+# Chặn liệt kê thư mục
+Options -Indexes
+
+# (Tùy chọn) Chuyển hướng các yêu cầu không phải file/thư mục đến index.html (cho Single Page App nếu cần)
+# RewriteCond %{REQUEST_FILENAME} !-f
+# RewriteCond %{REQUEST_FILENAME} !-d
+# RewriteRule ^ index.html [L]
