@@ -212,7 +212,10 @@ function debounce(func, wait) {
         const imageIndex = currentImageList.findIndex(item => item.name === imgData.name);
         const imageUrl = `images/${currentFolder}/${encodeURIComponent(imgData.name)}`;
 
-        const thumbSrc = imgData.thumb_path ? imgData.thumb_path : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // Placeholder if thumb fails
+        // Construct the correct, full thumbnail path if thumb_path exists
+        const thumbSrc = imgData.thumb_path 
+                         ? `${location.origin}${location.pathname.substring(0, location.pathname.lastIndexOf('/'))}/${imgData.thumb_path}` 
+                         : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // Placeholder if thumb fails
         img.src = thumbSrc; 
         img.alt = imgData.name;
         img.loading = 'lazy';

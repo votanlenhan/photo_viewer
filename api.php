@@ -246,7 +246,7 @@ function getFolderStats($folder_path) {
  * Create a thumbnail image using GD library.
  * 
  * @param string $source_path Absolute path to the source image.
- * @param string $cache_path Absolute path to save the thumbnail.
+ * @param string $cache_path Absolute path to save the thumbnail (INCLUDING the size subdirectory).
  * @param int $thumb_size Desired width/height of the thumbnail (square).
  * @return bool True on success, false on failure.
  */
@@ -333,7 +333,7 @@ function create_thumbnail($source_path, $cache_path, $thumb_size = 150) {
         }
 
         // Save the thumbnail (output as JPEG for simplicity/consistency in cache)
-        // Ensure cache directory exists
+        // Ensure cache directory exists (including the size-specific subdirectory)
         $cache_dir = dirname($cache_path);
         if (!is_dir($cache_dir)) {
             if (!@mkdir($cache_dir, 0775, true)) { // Create recursively with permissions
@@ -437,21 +437,30 @@ switch ($action) {
                  // --- Thumbnail Logic --- 
                  $thumbnail_relative_path = null;
                  $original_image_relative_path = find_first_image_recursive($dir_path_absolute, $dir_name, $allowed_ext);
+                 $thumb_size = 150; // Explicitly define size for directory thumbs
                  
                  if ($original_image_relative_path) {
                      $cache_hash = md5($original_image_relative_path); 
                      $cache_filename = $cache_hash . '.jpg';
-                     $cache_filepath_relative = 'cache/thumbnails/' . $cache_filename;
-                     $cache_filepath_absolute = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $cache_filename;
+                     // Include size in cache path
+                     $cache_filepath_relative = 'cache/thumbnails/' . $thumb_size . '/' . $cache_filename;
+                     $cache_filepath_absolute = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $thumb_size . DIRECTORY_SEPARATOR . $cache_filename;
                      $original_image_absolute_path = IMAGE_ROOT . DIRECTORY_SEPARATOR . $original_image_relative_path;
 
                      if (file_exists($cache_filepath_absolute)) {
                          $thumbnail_relative_path = $cache_filepath_relative; 
                      } else {
-                          $create_success = create_thumbnail($original_image_absolute_path, $cache_filepath_absolute);
-                          if (!$create_success) {
-                              error_log("[list_dirs] Failed to create thumbnail for '{$dir_name}'. Setting path to null.");
-                              $thumbnail_relative_path = null; 
+                          // Ensure the original image path is valid and readable before creating thumb
+                          if (is_readable($original_image_absolute_path)) { 
+                              $create_success = create_thumbnail($original_image_absolute_path, $cache_filepath_absolute, $thumb_size);
+                              if ($create_success) {
+                                   $thumbnail_relative_path = $cache_filepath_relative;
+                                   error_log("[list_dirs] Created thumbnail for '{$dir_name}' -> {$cache_filepath_relative}");
+                              } else {
+                                   error_log("[list_dirs] WARNING: Failed to create thumbnail for: {$original_image_relative_path} (create_thumbnail returned false)");
+                              }
+                          } else {
+                               error_log("[list_dirs] WARNING: Original image not readable, cannot create thumbnail: {$original_image_absolute_path}");
                           }
                      }
                  } else {
@@ -624,10 +633,11 @@ switch ($action) {
                 $original_absolute_path = $full_path . DIRECTORY_SEPARATOR . $image_name;
                 $cache_hash = md5($original_relative_path);
                 $cache_filename = $cache_hash . '.jpg'; // Save thumbs as JPG
-                $thumbnail_relative_cache_path = 'cache/thumbnails/' . $cache_filename;
-                $thumbnail_absolute_cache_path = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $cache_filename;
                 $generated_thumb_path = null; // Initialize
                 $thumb_size = 750; // Desired thumbnail size (e.g., 750px width/height)
+                // Include size in cache path
+                $thumbnail_relative_cache_path = 'cache/thumbnails/' . $thumb_size . '/' . $cache_filename;
+                $thumbnail_absolute_cache_path = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $thumb_size . DIRECTORY_SEPARATOR . $cache_filename;
 
                 try { // Add try-catch around file operations
                     if (file_exists($thumbnail_absolute_cache_path)) {
