@@ -4,12 +4,12 @@ session_start(); // Luôn bắt đầu session ở đầu file cần dùng sessi
 // --- CẤU HÌNH ADMIN ---
 define('ADMIN_USERNAME', 'admin'); // Đặt tên đăng nhập admin mong muốn
 
-// QUAN TRỌNG: Tạo mã hash cho mật khẩu của bạn.
-// Mở Terminal/Command Prompt và chạy lệnh sau (thay 'YourSecurePassword123' bằng mật khẩu thực tế của bạn):
-// php -r "echo password_hash('YourSecurePassword123', PASSWORD_DEFAULT);"
-// Copy kết quả hash (ví dụ: $2y$10$...) và dán vào dòng dưới đây.
-// Ví dụ hash cho 'password' là: $2y$10$.lWLpmOjLY6pun9c62z9iOo9/in5RA/UQKTMd513rR2QhlB34Vvu2
-define('ADMIN_PASSWORD_HASH', '$2y$10$UAS9A0nXIpgHge9UzanyCOFG.b94eKryuQHI1mlHi4YXrvq3.7kYm'); // <<<--- THAY THẾ BẰNG HASH MẬT KHẨU CỦA BẠN !!!
+// !!! SECURITY WARNING !!!
+// DO NOT COMMIT YOUR REAL PASSWORD HASH TO A PUBLIC REPOSITORY.
+// Ideally, move these credentials to environment variables or a config file outside the web root (and add to .gitignore).
+// Make sure to change the password immediately after deploying to a new server.
+// The hash below is a placeholder for the password "password".
+define('ADMIN_PASSWORD_HASH', '$2y$10$.lWLpmOjLY6pun9c62z9iOo9/in5RA/UQKTMd513rR2QhlB34Vvu2'); // <<<--- GENERATE AND REPLACE WITH YOUR OWN SECURE HASH !!!
 
 $error_message = '';
 

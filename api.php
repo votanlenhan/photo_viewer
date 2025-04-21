@@ -186,132 +186,6 @@ function find_first_image_recursive($start_path, $base_folder_name, &$allowed_ex
     return null; // No image found
 }
 
-/**
- * Create a thumbnail image using GD library.
- * 
- * @param string $source_path Absolute path to the source image.
- * @param string $cache_path Absolute path to save the thumbnail (INCLUDING the size subdirectory).
- * @param int $thumb_size Desired width/height of the thumbnail (square).
- * @return bool True on success, false on failure.
- */
-function create_thumbnail($source_path, $cache_path, $thumb_size = 150) {
-    if (!extension_loaded('gd')) {
-        error_log("GD extension is not loaded. Cannot create thumbnail.");
-        return false;
-    }
-    
-    try {
-        $image_info = @getimagesize($source_path);
-        if ($image_info === false) {
-             error_log("create_thumbnail: Failed to get image size for: {$source_path}");
-             return false;
-        }
-        $mime = $image_info['mime'];
-        $original_width = $image_info[0];
-        $original_height = $image_info[1];
-
-        // Create image resource based on mime type
-        $source_image = null;
-        switch ($mime) {
-            case 'image/jpeg':
-            case 'image/jpg': // Handle both common mimetypes
-                $source_image = @imagecreatefromjpeg($source_path);
-                break;
-            case 'image/png':
-                $source_image = @imagecreatefrompng($source_path);
-                break;
-            case 'image/gif':
-                $source_image = @imagecreatefromgif($source_path);
-                break;
-            case 'image/webp':
-                 if (function_exists('imagecreatefromwebp')) { // Check if webp is supported by GD
-                     $source_image = @imagecreatefromwebp($source_path);
-                 } else {
-                    error_log("create_thumbnail: WebP is not supported by this GD version for: {$source_path}");
-                    return false; // Cannot process webp if not supported
-                 }
-                break;
-            // Add other types if needed (bmp?)
-            default:
-                error_log("create_thumbnail: Unsupported image type '{$mime}' for: {$source_path}");
-                return false;
-        }
-
-        if ($source_image === false) {
-            error_log("create_thumbnail: Failed to create image resource from: {$source_path}");
-            return false;
-        }
-
-        // Calculate new dimensions while maintaining aspect ratio
-        $ratio = $original_width / $original_height;
-        if ($original_width > $original_height) {
-            $thumb_width = $thumb_size;
-            $thumb_height = intval($thumb_size / $ratio);
-        } else {
-            $thumb_height = $thumb_size;
-            $thumb_width = intval($thumb_size * $ratio);
-        }
-
-        // Create the thumbnail canvas
-        $thumb_image = imagecreatetruecolor($thumb_width, $thumb_height);
-         if ($thumb_image === false) {
-            error_log("create_thumbnail: Failed to create true color image resource.");
-            imagedestroy($source_image); 
-            return false;
-        }
-
-        // Handle transparency for PNG and GIF
-        if ($mime == 'image/png' || $mime == 'image/gif') {
-            imagealphablending($thumb_image, false);
-            imagesavealpha($thumb_image, true);
-            $transparent = imagecolorallocatealpha($thumb_image, 255, 255, 255, 127);
-            imagefilledrectangle($thumb_image, 0, 0, $thumb_width, $thumb_height, $transparent);
-        }
-
-        // Resize the image
-        if (!imagecopyresampled($thumb_image, $source_image, 0, 0, 0, 0, $thumb_width, $thumb_height, $original_width, $original_height)) {
-            error_log("create_thumbnail: imagecopyresampled failed.");
-            imagedestroy($source_image); 
-            imagedestroy($thumb_image);
-            return false;
-        }
-
-        // Save the thumbnail (output as JPEG for simplicity/consistency in cache)
-        // Ensure cache directory exists (including the size-specific subdirectory)
-        $cache_dir = dirname($cache_path);
-        if (!is_dir($cache_dir)) {
-            if (!@mkdir($cache_dir, 0775, true)) { // Create recursively with permissions
-                 error_log("create_thumbnail: Failed to create cache directory: {$cache_dir}");
-                 imagedestroy($source_image); 
-                 imagedestroy($thumb_image);
-                 return false;
-            }
-        }
-
-        $save_success = imagejpeg($thumb_image, $cache_path, 85); // Quality 85
-
-        // Clean up resources
-        imagedestroy($source_image);
-        imagedestroy($thumb_image);
-
-        if (!$save_success) {
-             error_log("create_thumbnail: Failed to save thumbnail to: {$cache_path}");
-             if (file_exists($cache_path)) @unlink($cache_path); // Delete partial/failed file
-             return false;
-        }
-        
-        return true;
-
-    } catch (Throwable $e) {
-        error_log("create_thumbnail: Exception while creating thumbnail for {$source_path} -> {$cache_path} : " . $e->getMessage());
-        // Clean up potential resources on error
-        if (isset($source_image) && is_resource($source_image)) imagedestroy($source_image);
-        if (isset($thumb_image) && is_resource($thumb_image)) imagedestroy($thumb_image);
-         if (file_exists($cache_path)) @unlink($cache_path); // Delete partial/failed file
-        return false;
-    }
-}
-
 // --- KIỂM TRA BAN ĐẦU ---
 if (!IMAGE_ROOT || !is_dir(IMAGE_ROOT) || !is_readable(IMAGE_ROOT)) {
     // Ensure appropriate permissions are set on the server.
@@ -392,28 +266,19 @@ switch ($action) {
                  if ($original_image_relative_path) {
                      $cache_hash = md5($original_image_relative_path); 
                      $cache_filename = $cache_hash . '.jpg';
-                     // Include size in cache path
                      $cache_filepath_relative = 'cache/thumbnails/' . $thumb_size . '/' . $cache_filename;
                      $cache_filepath_absolute = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $thumb_size . DIRECTORY_SEPARATOR . $cache_filename;
-                     $original_image_absolute_path = IMAGE_ROOT . DIRECTORY_SEPARATOR . $original_image_relative_path;
+                     //$original_image_absolute_path = IMAGE_ROOT . DIRECTORY_SEPARATOR . $original_image_relative_path; // Not needed anymore here
 
+                     // Only check if the cached thumbnail exists (cron job handles creation)
                      if (file_exists($cache_filepath_absolute)) {
                          $thumbnail_relative_path = $cache_filepath_relative; 
                      } else {
-                          // Ensure the original image path is valid and readable before creating thumb
-                          if (is_readable($original_image_absolute_path)) { 
-                              $create_success = create_thumbnail($original_image_absolute_path, $cache_filepath_absolute, $thumb_size);
-                              if ($create_success) {
-                                   $thumbnail_relative_path = $cache_filepath_relative;
-                              } else {
-                                   error_log("[list_dirs] WARNING: Failed to create thumbnail for: {$original_image_relative_path} (create_thumbnail returned false)");
-                              }
-                          } else {
-                               error_log("[list_dirs] WARNING: Original image not readable, cannot create thumbnail: {$original_image_absolute_path}");
-                          }
+                         // Log if thumbnail is missing, cron should create it later
+                         error_log("[list_dirs] Thumbnail MISSING for '{$dir_name}' -> {$cache_filepath_relative}. Cron should create it.");
+                         // No longer call create_thumbnail here
                      }
                  } else {
-                     error_log("[list_dirs] No original image found for '{$dir_name}'. Setting path to null.");
                      $thumbnail_relative_path = null; 
                  }
                  // --- End Thumbnail Logic ---
@@ -505,101 +370,61 @@ switch ($action) {
                  usort($subfolders_data, fn($a, $b) => strcasecmp($a['displayName'], $b['displayName']));
             }
             sort($all_image_names, SORT_STRING | SORT_FLAG_CASE);
-            $total_images = count($all_image_names);
+            $total_images = count($all_image_names); // Total images based on initial scan
 
-            // --- Image Metadata Caching Logic --- 
-            $all_images_metadata_cache = null;
-            $metadata_file = $full_path . DIRECTORY_SEPARATOR . '.img_metadata.json';
-            
-            // Try reading cache file
-            if (file_exists($metadata_file)) {
-                $json_content = @file_get_contents($metadata_file);
-                if ($json_content !== false) {
-                    $decoded_data = @json_decode($json_content, true);
-                    if (is_array($decoded_data)) { // Check if decode was successful and is an array
-                         $all_images_metadata_cache = $decoded_data;
-                    } else {
-                         error_log("[list_sub_items] WARNING: Failed to decode JSON metadata cache for: {$safe_relative_path}");
-                    }
-                } else {
-                     error_log("[list_sub_items] WARNING: Failed to read metadata cache file (exists but unreadable?): {$metadata_file}");
-                }
-            }
+            // --- Removed Image Metadata Caching Logic --- 
 
-            // If cache is missing or invalid, generate it
-            if ($all_images_metadata_cache === null) {
-                 error_log("[list_sub_items] Metadata cache miss or invalid. Generating for: {$safe_relative_path}");
-                 $all_images_metadata_cache = [];
-                 foreach ($all_image_names as $img_name) { // Iterate through ALL image names
-                    $img_path_absolute = $full_path . DIRECTORY_SEPARATOR . $img_name;
-                    $width = 0;
-                    $height = 0;
-                    $image_size = @getimagesize($img_path_absolute);
-                    if ($image_size !== false) {
-                        $width = $image_size[0];
-                        $height = $image_size[1];
-                    } else {
-                        error_log("[list_sub_items] WARNING: Failed to get image size during cache generation for: {$img_path_absolute}");
-                    }
-                    $all_images_metadata_cache[$img_name] = ['width' => $width, 'height' => $height];
-                 }
-                 
-                 // Try to write the cache file
-                 $json_to_write = json_encode($all_images_metadata_cache, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-                 if ($json_to_write !== false) {
-                    if (@file_put_contents($metadata_file, $json_to_write) !== false) {
-                    } else {
-                         error_log("[list_sub_items] ERROR: Failed to write metadata cache file (permissions?): {$metadata_file}");
-                    }
-                 } else {
-                     error_log("[list_sub_items] ERROR: Failed to encode metadata to JSON for: {$safe_relative_path}");
-                 }
-            }
-            // --- End Image Metadata Caching Logic ---
-
-            // Paginate image names *after* sorting
+            // Paginate image names *using initially scanned list* after sorting
             $image_names_for_page = array_slice($all_image_names, $offset, $limit);
 
-            // Build the response metadata for the current page using the cached data
+            // Build the response metadata for the current page, getting image size on-the-fly
             $images_metadata_for_page = [];
             foreach ($image_names_for_page as $image_name) {
-                $metadata = $all_images_metadata_cache[$image_name] ?? ['width' => 0, 'height' => 0]; // Use cached data, default if somehow missing
+                // Get image size directly
+                $width = 0;
+                $height = 0;
+                $img_path_absolute = $full_path . DIRECTORY_SEPARATOR . $image_name;
+                $image_size = false;
+                try {
+                     if (is_readable($img_path_absolute)) {
+                         $image_size = @getimagesize($img_path_absolute);
+                     } else {
+                          error_log("[list_sub_items] WARNING: Image not readable, cannot get size: {$img_path_absolute}");
+                     }
+                } catch (Exception $e) {
+                     error_log("[list_sub_items] Exception getting image size for {$img_path_absolute}: " . $e->getMessage());
+                }
+                if ($image_size !== false) {
+                    $width = $image_size[0];
+                    $height = $image_size[1];
+                } else {
+                    // Logged above if specific error occurred
+                }
                 
-                // --- Thumbnail Generation/Retrieval Logic ---
+                // --- Thumbnail Generation/Retrieval Logic (Updated: Only Retrieval) ---
                 $original_relative_path = (empty($safe_relative_path) ? '' : $safe_relative_path . '/') . $image_name;
-                $original_absolute_path = $full_path . DIRECTORY_SEPARATOR . $image_name;
+                $original_absolute_path = $img_path_absolute; // Already have absolute path
                 $cache_hash = md5($original_relative_path);
                 $cache_filename = $cache_hash . '.jpg'; // Save thumbs as JPG
                 $generated_thumb_path = null; // Initialize
-                $thumb_size = 750; // Desired thumbnail size (e.g., 750px width/height)
-                // Include size in cache path
+                $thumb_size = 750; // Desired thumbnail size
                 $thumbnail_relative_cache_path = 'cache/thumbnails/' . $thumb_size . '/' . $cache_filename;
                 $thumbnail_absolute_cache_path = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $thumb_size . DIRECTORY_SEPARATOR . $cache_filename;
 
-                try { // Add try-catch around file operations
-                    if (file_exists($thumbnail_absolute_cache_path)) {
-                        $generated_thumb_path = $thumbnail_relative_cache_path;
-                    } else {
-                        // Check if original exists and is readable before trying to create thumb
-                        if (is_readable($original_absolute_path)) {
-                            if (create_thumbnail($original_absolute_path, $thumbnail_absolute_cache_path, $thumb_size)) {
-                                $generated_thumb_path = $thumbnail_relative_cache_path;
-                            } else {
-                                error_log("[list_sub_items] WARNING: Failed to create thumbnail for: {$original_relative_path} (create_thumbnail returned false)");
-                            }
-                        } else {
-                             error_log("[list_sub_items] WARNING: Original image not readable, cannot create thumbnail: {$original_absolute_path}");
-                        }
-                    }
-                } catch (Throwable $thumb_error) {
-                     error_log("[list_sub_items] ERROR during thumbnail check/creation for {$original_relative_path}: " . $thumb_error->getMessage());
+                // Only check if the cached thumbnail exists (cron job handles creation)
+                if (file_exists($thumbnail_absolute_cache_path)) {
+                    $generated_thumb_path = $thumbnail_relative_cache_path;
+                } else {
+                    // Log if thumbnail is missing, cron should create it later
+                    error_log("[list_sub_items] Thumbnail MISSING for '{$original_relative_path}' -> {$thumbnail_relative_cache_path}. Cron should create it.");
+                    // No longer call create_thumbnail here
                 }
                 // --- End Thumbnail Logic ---
                 
                 $images_metadata_for_page[] = [
                     'name' => $image_name,
-                    'width' => $metadata['width'],
-                    'height' => $metadata['height'],
+                    'width' => $width, // Width obtained directly
+                    'height' => $height, // Height obtained directly
                     'thumb_path' => $generated_thumb_path
                 ];
             }

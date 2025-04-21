@@ -5,11 +5,13 @@
 $db_type = 'sqlite'; // Database type (e.g., sqlite, mysql)
 $db_path = __DIR__ . '/database.sqlite'; // Path for SQLite file
 
-// MySQL settings (only used if $db_type is 'mysql')
+// --- MySQL settings (EXAMPLE ONLY - NOT USED WHEN $db_type is 'sqlite') ---
+/*
 $db_host = 'localhost';
 $db_name = 'photo_gallery_db';
 $db_user = 'root'; // SECURITY: Use a dedicated, less privileged user.
 $db_pass = ''; // SECURITY: Use a strong password and avoid hardcoding.
+*/
 
 // --- PDO Connection Options ---
 $options = [
