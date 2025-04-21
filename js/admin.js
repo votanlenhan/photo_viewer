@@ -104,10 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusClass = isProtected ? 'status-protected' : 'status-unprotected';
             const statusText = isProtected ? 'Được bảo vệ' : 'Công khai';
             
-            // Generate Share URL (relative path for now, needs base URL)
-            // Construct URL based on current location - robust way
+            // Generate Share URL using the source-prefixed path (folder.path)
             const baseUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'))}/`; // Get base path
-            const shareUrl = `${baseUrl}#?folder=${encodeURIComponent(folder.name)}`;
+            const shareUrl = `${baseUrl}#?folder=${encodeURIComponent(folder.path)}`; // Use folder.path
 
             row.innerHTML = `
                 <td>${escapeHTML(folder.name)}</td>

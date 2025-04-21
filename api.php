@@ -1581,10 +1581,9 @@ switch ($action) {
 
     // --- MOVE get_image HERE ---
     case 'get_image':
-        // Use error_log consistently
-        error_log("--- [get_image] START ---"); 
+        // error_log("--- [get_image] START ---"); // REMOVE DEBUG
         $relativePath = $_GET['path'] ?? null;
-        error_log("[get_image] Received path parameter: " . print_r($relativePath, true));
+        // error_log("[get_image] Received path parameter: " . print_r($relativePath, true)); // REMOVE DEBUG
         if (!$relativePath) {
             error_log("[get_image ERROR] Path parameter is missing. Sending 400.");
             http_response_code(400);
@@ -1594,7 +1593,7 @@ switch ($action) {
             exit;
         }
 
-        error_log("[get_image] Validating path: $relativePath"); 
+        // error_log("[get_image] Validating path: $relativePath"); // REMOVE DEBUG
         $image_path_info = validate_source_and_file_path($relativePath);
 
         if ($image_path_info === null) { 
@@ -1607,16 +1606,16 @@ switch ($action) {
         }
         $absolutePath = $image_path_info['absolute_path'];
         $source_prefixed_path = $image_path_info['source_prefixed_path'];
-        error_log("[get_image] Path validated. Absolute: {$absolutePath}, Prefixed: {$source_prefixed_path}");
+        // error_log("[get_image] Path validated. Absolute: {$absolutePath}, Prefixed: {$source_prefixed_path}"); // REMOVE DEBUG
         
         // --- ACCESS CHECK (Based on containing folder) ---
         $containing_folder_path = dirname($source_prefixed_path);
         if ($containing_folder_path === $image_path_info['source_key'] || $containing_folder_path === '.') {
             $containing_folder_path = $image_path_info['source_key']; 
         }
-        error_log("[get_image] Checking access for containing folder: {$containing_folder_path}");
+        // error_log("[get_image] Checking access for containing folder: {$containing_folder_path}"); // REMOVE DEBUG
         $access = check_folder_access($containing_folder_path); 
-        error_log("[get_image] Access check result: " . json_encode($access));
+        // error_log("[get_image] Access check result: " . json_encode($access)); // REMOVE DEBUG
         if (!$access['authorized']) {
             error_log("[get_image ACCESS DENIED] Access denied for image in folder: $containing_folder_path (Image: $source_prefixed_path). Sending 401."); 
             http_response_code(401); 
@@ -1625,10 +1624,10 @@ switch ($action) {
             echo "Error: Access denied to the folder containing this image.";
             exit;
         }
-        error_log("[get_image ACCESS GRANTED] Access granted for image in folder: $containing_folder_path (Image: $source_prefixed_path)"); 
+        // error_log("[get_image ACCESS GRANTED] Access granted for image in folder: $containing_folder_path (Image: $source_prefixed_path)"); // REMOVE DEBUG
 
         // Determine MIME type
-        error_log("[get_image] Determining MIME type for: {$absolutePath}");
+        // error_log("[get_image] Determining MIME type for: {$absolutePath}"); // REMOVE DEBUG
         $mime_type = mime_content_type($absolutePath);
         if (!$mime_type) {
             // Fallback based on extension if mime_content_type fails
@@ -1636,12 +1635,12 @@ switch ($action) {
             $mime_map = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'gif' => 'image/gif', 'webp' => 'image/webp']; // Added webp
             $mime_type = $mime_map[$extension] ?? 'application/octet-stream'; 
             error_log("[get_image WARNING] mime_content_type failed, using fallback based on extension ($extension): $mime_type"); 
-        } else {
-            error_log("[get_image] Determined MIME type: $mime_type"); 
+        // } else {
+            // error_log("[get_image] Determined MIME type: $mime_type"); // REMOVE DEBUG
         }
         
-        error_log("[get_image] Getting filesize for: {$absolutePath}");
-        $file_size = @filesize($absolutePath); // Use @ to suppress warning if file disappears
+        // error_log("[get_image] Getting filesize for: {$absolutePath}"); // REMOVE DEBUG
+        $file_size = @filesize($absolutePath); 
         if ($file_size === false) {
              error_log("[get_image ERROR] filesize() failed for: {$absolutePath}. Sending 500.");
              http_response_code(500);
@@ -1650,16 +1649,16 @@ switch ($action) {
              echo "Error: Could not get file size.";
              exit;
         }
-         error_log("[get_image] Filesize: $file_size bytes");
+        // error_log("[get_image] Filesize: $file_size bytes"); // REMOVE DEBUG
 
         // Set headers
-         error_log("[get_image] Setting headers: Content-Type={$mime_type}, Content-Length={$file_size}");
+        // error_log("[get_image] Setting headers: Content-Type={$mime_type}, Content-Length={$file_size}"); // REMOVE DEBUG
          // Clear buffer BEFORE sending headers
          if (ob_get_level()) {
-             error_log("[get_image] Cleaning output buffer (level: " . ob_get_level() . ").");
+             // error_log("[get_image] Cleaning output buffer (level: " . ob_get_level() . ")."); // REMOVE DEBUG
              ob_end_clean(); 
-         } else {
-              error_log("[get_image] Output buffer level is 0.");
+         // } else {
+              // error_log("[get_image] Output buffer level is 0."); // REMOVE DEBUG
          }
          
         header("Content-Type: $mime_type");
@@ -1670,15 +1669,15 @@ switch ($action) {
         header('Content-Disposition: inline; filename="' . basename($absolutePath) . '"'); 
 
         // Clear output buffer and read the file
-        error_log("[get_image] Flushing output buffer...");
-        flush(); // Flush system output buffer
-        error_log("[get_image] Calling readfile() for: {$absolutePath}");
+        // error_log("[get_image] Flushing output buffer..."); // REMOVE DEBUG
+        flush(); 
+        // error_log("[get_image] Calling readfile() for: {$absolutePath}"); // REMOVE DEBUG
         $readfile_result = readfile($absolutePath);
 
         if ($readfile_result === false) {
             error_log("[get_image ERROR] readfile() failed for: {$absolutePath}. Headers were already sent."); 
-        } else {
-            error_log("[get_image] Successfully served file: $absolutePath ($file_size bytes, readfile returned: " . print_r($readfile_result, true) . "). Exiting."); 
+        // } else {
+            // error_log("[get_image] Successfully served file: $absolutePath ($file_size bytes, readfile returned: " . print_r($readfile_result, true) . "). Exiting."); // REMOVE DEBUG
         }
         exit; 
     // --- END ACTION: get_image ---
