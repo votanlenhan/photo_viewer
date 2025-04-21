@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${folder.downloads || 0}</td>
                 <td><input type="text" value="${escapeHTML(shareUrl)}" readonly title="Click để sao chép" class="share-link-input"></td>
                 <td>
-                    <form class="action-form" data-folder="${escapeHTML(folder.name)}">
+                    <form class="action-form" data-folder="${escapeHTML(folder.path)}">
                         <input type="password" name="password" placeholder="Mật khẩu mới..." autocomplete="new-password">
                         <button type="submit" class="button set-button" title="Đặt hoặc cập nhật mật khẩu">Lưu</button>
                         ${isProtected ? '<button type="button" class="button remove-button" title="Xóa mật khẩu">Xóa MK</button>' : ''}

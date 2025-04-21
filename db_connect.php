@@ -13,6 +13,76 @@ $db_user = 'root'; // SECURITY: Use a dedicated, less privileged user.
 $db_pass = ''; // SECURITY: Use a strong password and avoid hardcoding.
 */
 
+// --- Image Source Configuration ---
+// IMPORTANT: Replace the path for 'extra_drive' with the actual absolute path 
+//            to your additional image directory on the other drive.
+//            Ensure the web server process has read access to this directory.
+// Use unique keys for each source (e.g., 'main', 'extra_drive').
+// These keys will be used internally to identify the source.
+define('IMAGE_SOURCES', [
+    'main' => realpath(__DIR__ . '/images'), // Primary source inside the project
+    'extra_drive' => 'G:\\2020' // <--- CORRECTED PATH
+    // Add more sources here if needed, e.g.:
+    // 'network_share' => '/mnt/shared_photos' 
+]);
+
+// Validate IMAGE_SOURCES paths
+foreach (IMAGE_SOURCES as $key => $path) {
+    if ($path === false || !is_dir($path) || !is_readable($path)) {
+        // Log a fatal error and stop execution if any source is invalid
+        $error_msg = "CRITICAL CONFIG ERROR: Image source '{$key}' is invalid or not readable: '{$path}'. Check path and permissions.";
+        error_log($error_msg); 
+        // Display a user-friendly error if possible (might fail if headers already sent)
+        if (!headers_sent()) {
+             header('Content-Type: text/plain; charset=utf-8', true, 500);
+        }
+        die("Server Configuration Error: One or more image sources are invalid. Please check server logs.");
+    }
+}
+
+// --- Cache and Thumbnail Configuration ---
+define('ALLOWED_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']);
+define('THUMBNAIL_SIZES', [150, 750]); // Available thumbnail sizes
+
+try {
+    $cache_thumb_root_path = realpath(__DIR__ . '/cache/thumbnails');
+    if (!$cache_thumb_root_path) {
+        // Attempt to create cache/thumbnails directory if it doesn't exist
+        $cacheBase = __DIR__ . '/cache';
+        $thumbDir = $cacheBase . '/thumbnails';
+        error_log("Attempting to create cache directories: Base='{$cacheBase}', Thumb='{$thumbDir}'");
+        if (!is_dir($cacheBase)) @mkdir($cacheBase, 0775);
+        if (!is_dir($thumbDir)) @mkdir($thumbDir, 0775);
+        // Try realpath again
+        $cache_thumb_root_path = realpath($thumbDir);
+    }
+    
+    if (!$cache_thumb_root_path || !is_dir($cache_thumb_root_path) || !is_writable($cache_thumb_root_path)) {
+        throw new Exception("Failed to resolve, create, or write to CACHE_THUMB_ROOT path: '" . (__DIR__ . '/cache/thumbnails') . "'. Check permissions.");
+    }
+    define('CACHE_THUMB_ROOT', $cache_thumb_root_path);
+    
+    // Pre-create size directories if they don't exist
+    foreach (THUMBNAIL_SIZES as $size) {
+        $size_dir = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $size;
+        if (!is_dir($size_dir)) {
+            if (!@mkdir($size_dir, 0775)) {
+                error_log("Warning: Failed to automatically create thumbnail size directory: {$size_dir}");
+                // Don't make it fatal, but log it.
+            }
+        }
+    }
+
+} catch (Throwable $e) {
+    // Log the detailed error and stop execution
+    $error_msg = "CRITICAL CONFIG ERROR: Failed to configure cache paths - " . $e->getMessage();
+    error_log($error_msg);
+    if (!headers_sent()) {
+        header('Content-Type: text/plain; charset=utf-8', true, 500);
+    }
+    die("Server Configuration Error: Cache path setup failed. Please check server logs and permissions.");
+}
+
 // --- PDO Connection Options ---
 $options = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // Throw exceptions on error

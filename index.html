@@ -25,9 +25,17 @@
     </header>
 
     <main class="container user-view">
+        <!-- Thêm loading indicator ở đây -->
+        <div id="loading-indicator" style="display: none; text-align: center; padding: 20px;">
+            <p>Đang tải...</p> 
+            <!-- Bạn có thể thêm spinner CSS hoặc ảnh GIF ở đây nếu muốn -->
+        </div>
+
         <div id="directory-view">
             <div class="search-container google-style">
                 <input type="search" id="searchInput" placeholder="Tìm album ảnh (tên lớp, trường,...)" aria-label="Tìm kiếm album">
+                <!-- Thêm nút clear search -->
+                <button id="clearSearch" class="clear-search-button" style="display: none;" aria-label="Xóa tìm kiếm">&times;</button>
             </div>
             <p id="search-prompt" class="search-prompt">
                 Nhập từ khóa để tìm album ảnh của bạn.

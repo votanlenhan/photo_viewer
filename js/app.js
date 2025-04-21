@@ -177,26 +177,30 @@ function debounce(func, wait) {
     dirs.forEach(dir => {
             const li = document.createElement('li');
         const a  = document.createElement('a');
-        a.href = `#?folder=${encodeURIComponent(dir.name)}`;
-        a.dataset.dir = dir.name;
+        a.href = `#?folder=${encodeURIComponent(dir.path)}`;
+        a.dataset.dir = dir.path;
     
             const img = document.createElement('img');
             img.className = 'folder-thumbnail';
         
-        img.src = dir.thumbnail ? dir.thumbnail : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; 
-        img.alt = dir.name;
+        // Construct URL to get_thumbnail API endpoint
+        const thumbnailUrl = dir.thumbnail 
+            ? `api.php?action=get_thumbnail&path=${encodeURIComponent(dir.thumbnail)}&size=150` 
+            : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        img.src = thumbnailUrl;
+        img.alt = dir.name; // Use dir.name for alt text
             img.loading = 'lazy';
         img.onerror = () => { 
-            console.error(`[RenderThumb] Failed to load thumbnail for '${dir.name}' at src: ${img.src}`);
+            console.error(`[RenderTopLevelThumb] Failed to load thumbnail for '${dir.name}' at src: ${img.src}`);
             img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; 
             img.alt = 'Lỗi thumbnail';
         };
     
         const span = document.createElement('span');
-        span.textContent = dir.name;
+        span.textContent = dir.name; // Use dir.name for display text
     
             a.append(img, span);
-        a.onclick = e => { e.preventDefault(); navigateToFolder(dir.name); }; 
+        a.onclick = e => { e.preventDefault(); navigateToFolder(dir.path); }; // Use dir.path for navigation
             li.appendChild(a);
         listEl.appendChild(li);
     });
@@ -210,12 +214,12 @@ function debounce(func, wait) {
         const img = document.createElement('img');
         // Find the index in the *full* list based on the image name
         const imageIndex = currentImageList.findIndex(item => item.name === imgData.name);
-        const imageUrl = `images/${currentFolder}/${encodeURIComponent(imgData.name)}`;
+        // const imageUrl = `images/${currentFolder}/${encodeURIComponent(imgData.name)}`; // Original image path - not used directly for display
 
-        // Construct the correct, full thumbnail path if thumb_path exists
-        const thumbSrc = imgData.thumb_path 
-                         ? `${location.origin}${location.pathname.substring(0, location.pathname.lastIndexOf('/'))}/${imgData.thumb_path}` 
-                         : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // Placeholder if thumb fails
+        // Construct URL to fetch the thumbnail via API
+        // Use imgData.path which is the source-prefixed path of the original image
+        const thumbSrc = `api.php?action=get_thumbnail&path=${encodeURIComponent(imgData.path)}&size=750`; // Reverted to 750px per user request
+
         img.src = thumbSrc; 
         img.alt = imgData.name;
         img.loading = 'lazy';
@@ -250,9 +254,11 @@ function debounce(func, wait) {
       photoswipeLightbox = new PhotoSwipeLightbox({
           // dataSource now uses the full currentImageList which contains objects {name, width, height}
           dataSource: currentImageList.map(imgData => ({
-              src: `images/${currentFolder}/${encodeURIComponent(imgData.name)}`,
-              width: imgData.width || 0, // Use fetched width, default to 0 if missing
-              height: imgData.height || 0, // Use fetched height, default to 0 if missing
+              // Use the API endpoint to serve the original image
+              src: `api.php?action=get_image&path=${encodeURIComponent(imgData.path)}`,
+              // Use dimensions from API data if available (we'll add this to API later)
+              width: imgData.width || 0, // Use fetched width, default to 0 if missing for now
+              height: imgData.height || 0, // Use fetched height, default to 0 if missing for now
               alt: imgData.name
           })),
           pswpModule: PhotoSwipe,
@@ -270,9 +276,10 @@ function debounce(func, wait) {
       // Ensure dataSource is up-to-date before opening
       // Map again from the potentially updated currentImageList
       photoswipeLightbox.options.dataSource = currentImageList.map(imgData => ({
-           src: `images/${currentFolder}/${encodeURIComponent(imgData.name)}`,
-           width: imgData.width || 0,
-           height: imgData.height || 0,
+           // Use the API endpoint here as well
+           src: `api.php?action=get_image&path=${encodeURIComponent(imgData.path)}`,
+           width: imgData.width || 0, // Use fetched width, default to 0 if missing for now
+           height: imgData.height || 0, // Use fetched height, default to 0 if missing for now
            alt: imgData.name
       }));
       photoswipeLightbox.loadAndOpen(index);
@@ -305,7 +312,7 @@ function debounce(func, wait) {
 
     // --- Phase 1: Fetch initial small batch --- 
     console.log(`Phase 1: Fetching initial ${initialLoadLimit} images`);
-    const initialResult = await fetchData(`api.php?action=list_sub_items&dir=${encodeURIComponent(folderPath)}&page=1&limit=${initialLoadLimit}`);
+    const initialResult = await fetchData(`api.php?action=list_files&dir=${encodeURIComponent(folderPath)}&page=1&limit=${initialLoadLimit}`);
 
     // Handle immediate errors or password prompt
     if (initialResult.status === 'password_required') {
@@ -320,9 +327,14 @@ function debounce(func, wait) {
 
     // Initial fetch successful, clear loading message
     gridEl.innerHTML = ''; 
-    const { subfolders, images: initialImagesMetadata, totalImages: fetchedTotal } = initialResult.data;
+
+    // Destructure the response: map 'files' key to 'initialImagesMetadata'
+    // Get total image count from pagination data if available
+    const { folders: subfolders, files: initialImagesMetadata, pagination } = initialResult.data;
+    const fetchedTotal = pagination ? pagination.total_items : (initialImagesMetadata ? initialImagesMetadata.length : 0);
+
     totalImages = fetchedTotal || 0;
-        let contentRendered = false;
+    let contentRendered = false;
     let imageGroupContainer = null; // To hold the image grid
 
     // Render subfolders (if any, only from first fetch)
@@ -332,21 +344,29 @@ function debounce(func, wait) {
             subfolders.forEach(sf => {
                 const li = document.createElement('li');
             const a = document.createElement('a');
-            a.href = `#?folder=${encodeURIComponent(sf.name)}`;
-            a.dataset.dir = sf.name;
+            a.href = `#?folder=${encodeURIComponent(sf.path)}`;
+            a.dataset.dir = sf.path;
 
                 const img = document.createElement('img');
                 img.className = 'folder-thumbnail';
-            img.src = sf.thumbnail ? `images/${sf.thumbnail}` : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-            img.alt = sf.displayName;
+            // Construct URL to get_thumbnail API endpoint
+            const thumbnailUrl = sf.thumbnail 
+                ? `api.php?action=get_thumbnail&path=${encodeURIComponent(sf.thumbnail)}&size=150` 
+                : 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+            img.src = thumbnailUrl;
+            img.alt = sf.name; // Use sf.name for alt text
                 img.loading = 'lazy';
-            img.onerror = () => { img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; img.alt = 'Lỗi thumbnail'; };
+            img.onerror = () => { 
+                console.error(`[RenderSubfolderThumb] Failed to load thumbnail for '${sf.name}' at src: ${img.src}`);
+                img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; 
+                img.alt = 'Lỗi thumbnail'; 
+            };
 
             const span = document.createElement('span');
-            span.textContent = sf.displayName;
+            span.textContent = sf.name; // Use sf.name for display text
 
                 a.append(img, span);
-            a.onclick = e => { e.preventDefault(); navigateToFolder(sf.name); };
+            a.onclick = e => { e.preventDefault(); navigateToFolder(sf.path); }; // Use sf.path for navigation
                 li.appendChild(a);
                 ul.appendChild(li);
             });
@@ -417,13 +437,13 @@ function debounce(func, wait) {
         gridEl.appendChild(loadingRestEl);
         
         console.log(`Phase 2: Fetching up to ${standardLoadLimit} images (page 1)`);
-        const secondResult = await fetchData(`api.php?action=list_sub_items&dir=${encodeURIComponent(folderPath)}&page=1&limit=${standardLoadLimit}`);
+        const secondResult = await fetchData(`api.php?action=list_files&dir=${encodeURIComponent(folderPath)}&page=1&limit=${standardLoadLimit}`);
         
         // Remove subtle loading indicator regardless of result
         if(loadingRestEl) loadingRestEl.remove();
         
-        if (secondResult.status === 'success' && secondResult.data.images) {
-            const allFirstPageMetadata = secondResult.data.images;
+        if (secondResult.status === 'success' && secondResult.data.files) {
+            const allFirstPageMetadata = secondResult.data.files;
             // Get the items that were NOT loaded in phase 1
             const newImagesToRender = allFirstPageMetadata.slice(initialLoadLimit);
             
@@ -489,10 +509,11 @@ function debounce(func, wait) {
     console.log(`Load More: Fetching page ${nextConceptualPage} (limit ${standardLoadLimit})`);
 
     try {
-        const res = await fetchData(`api.php?action=list_sub_items&dir=${encodeURIComponent(currentFolder)}&page=${nextConceptualPage}&limit=${standardLoadLimit}`);
+        const res = await fetchData(`api.php?action=list_files&dir=${encodeURIComponent(currentFolder)}&page=${nextConceptualPage}&limit=${standardLoadLimit}`);
         console.log(`Load More: Result for page ${nextConceptualPage}:`, res);
-        if (res.status === 'success' && res.data.images) {
-            const newImagesMetadata = res.data.images;
+        // Check for 'files' key in the response data
+        if (res.status === 'success' && res.data.files) {
+            const newImagesMetadata = res.data.files;
             if (newImagesMetadata.length > 0) {
                  currentImageList = currentImageList.concat(newImagesMetadata); 
                  const gridContainer = document.querySelector('#image-grid .image-group');
@@ -584,82 +605,74 @@ function debounce(func, wait) {
 
   // --- Load Top Level Directories (Restored & Fixed) ---
   async function loadTopLevelDirectories(searchTerm = null) { 
-    console.log("*** loadTopLevelDirectories START *** SearchTerm:", searchTerm);
-
     const listEl = document.getElementById('directory-list');
     const promptEl = document.getElementById('search-prompt');
-    if (!listEl || !promptEl) {
-        console.error("Missing list or prompt element in loadTopLevelDirectories");
+    const searchInput = document.getElementById('searchInput');
+    const clearSearch = document.getElementById('clearSearch');
+    const loadingIndicator = document.getElementById('loading-indicator'); // Added loading indicator
+
+    if (!listEl || !promptEl || !searchInput || !clearSearch || !loadingIndicator) {
+        console.error("Required elements not found for loadTopLevelDirectories");
         return;
     }
 
+    loadingIndicator.style.display = 'block'; // Show loading indicator
+    promptEl.style.display = 'none'; // Hide prompt while loading
+    listEl.innerHTML = '<div class="loading-placeholder">Đang tải danh sách album...</div>'; // Initial placeholder
+
     const isSearching = searchTerm !== null && searchTerm !== '';
-    let signal = null; // Initialize signal to null
 
-    // Abort previous search *only if* starting a new search
-    if (isSearching) {
-        if (searchAbortController) {
-            console.log("Aborting previous search request.");
-            searchAbortController.abort(); 
-        }
-        // Create a new controller and signal *only* for searches
-        searchAbortController = new AbortController();
-        signal = searchAbortController.signal;
-        console.log("Created new AbortController for search.");
+    // Update search input and clear button visibility
+    searchInput.value = searchTerm || '';
+    clearSearch.style.display = isSearching ? 'inline-block' : 'none';
+
+    // Use the updated action 'list_files' for top-level listing
+    let url = 'api.php?action=list_files'; // <-- CHANGED from list_dirs
+    if (searchTerm) {
+        // For list_files, the directory parameter is used for subdirs.
+        // To list sources (top level), we don't need a search parameter here.
+        // We will filter the result client-side if needed, or implement server-side filtering for sources later.
+        // For now, always fetch all sources when searchTerm is present for top level.
+        // Let's keep the search logic client-side for simplicity for now.
+         // url += '&search=' + encodeURIComponent(searchTerm); // Remove server-side search for list_files root
+    }
+    
+    const result = await fetchData(url);
+    
+    console.log("Fetch result (isSearching: " + isSearching + "):", result); // Debugging line
+
+    loadingIndicator.style.display = 'none'; // Hide loading indicator
+    listEl.innerHTML = ''; // Clear placeholder/previous content
+
+    if (result.status === 'success') {
+         // The response format for list_files root is different: { folders: [...], files: [], ... }
+         // where folders contain the source info.
+         let dirs = result.data.folders || []; // Get the source folders
+         
+         // Client-side filtering if a search term was provided
+         if (isSearching) {
+             dirs = dirs.filter(dir => 
+                 dir.name.toLowerCase().includes(searchTerm.toLowerCase())
+             );
+         }
+         
+         // If not searching, and we got more than 10, maybe shuffle and slice?
+         // Or just display all sources returned.
+         if (!isSearching && dirs.length > 10) {
+            // Optional: Shuffle and slice if you want random display for non-search
+            // shuffleArray(dirs); // Implement shuffleArray if needed
+            // dirs = dirs.slice(0, 10);
+         }
+
+         renderTopLevelDirectories(dirs, isSearching);
+         // Store the full list if needed for subsequent client-side searches without refetching
+         // allTopLevelDirs = result.data.folders || []; 
+
     } else {
-        // If it's an initial load, ensure any PENDING search is aborted
-        // but don't create a new controller for this initial load.
-        if (searchAbortController) {
-             console.log("Initial load: Aborting any pending search request.");
-             searchAbortController.abort();
-             searchAbortController = null; // Reset controller for non-search state
-        }
-    }
-    
-    // Build URL
-    let url = 'api.php?action=list_dirs';
-    if (isSearching) {
-        url += `&search=${encodeURIComponent(searchTerm)}`;
-    }
-    
-    // Set Loading Prompt & Clear List
-    if (promptEl) {
-        promptEl.textContent = isSearching ? 'Đang tìm kiếm album...' : 'Đang tải album...';
+        console.error("Lỗi tải album:", result.message);
+        listEl.innerHTML = `<div class="error-placeholder">Lỗi tải danh sách album: ${result.message}</div>`;
+        promptEl.textContent = 'Đã xảy ra lỗi. Vui lòng thử lại.';
         promptEl.style.display = 'block';
-    }
-    if (listEl) listEl.innerHTML = '';
-
-    // Prepare fetch options (only add signal if searching)
-    const fetchOptions = {};
-    if (isSearching && signal) {
-        fetchOptions.signal = signal;
-    }
-
-    console.log(`Fetching from: ${url} (isSearching: ${isSearching})`);
-    try {
-        const result = await fetchData(url, fetchOptions);
-        console.log(`Fetch result (isSearching: ${isSearching}):`, result);
-
-        if (result.status === 'success') {
-            allTopLevelDirs = result.data.directories;
-            renderTopLevelDirectories(allTopLevelDirs, isSearching); // Pass search status
-        } else {
-            // Handle error based on context
-            const errorMsg = isSearching ? `Lỗi tìm kiếm: ${result.message || 'Không rõ lỗi'}` : `Lỗi tải album: ${result.message || 'Không rõ lỗi'}`;
-            console.error(errorMsg);
-            if (promptEl) promptEl.textContent = errorMsg;
-            if (listEl) listEl.innerHTML = ''; // Ensure list is empty on error
-        }
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.log('Fetch aborted (likely due to new search).'); // Expected behavior
-        } else {
-             // Handle unexpected errors
-             const errorMsg = isSearching ? `Lỗi tìm kiếm: ${error.message || 'Lỗi không xác định'}` : `Lỗi tải album: ${error.message || 'Lỗi không xác định'}`;
-             console.error("Fetch exception:", error);
-             if (promptEl) promptEl.textContent = errorMsg;
-             if (listEl) listEl.innerHTML = '';
-        }
     }
   }
 
