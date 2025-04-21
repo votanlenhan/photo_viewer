@@ -203,45 +203,6 @@ function find_first_image_recursive($start_path, $base_folder_name, &$allowed_ex
     return null; // No image found
 }
 
-/** Lấy thống kê thư mục đệ quy */
-function getFolderStats($folder_path) {
-    $total_views = 0;
-    $total_downloads = 0;
-    $count_file = $folder_path . '/.count';
-    $download_count_file = $folder_path . '/.download_count';
-
-    $view_content = 'not_found';
-    if (file_exists($count_file)) {
-        $view_content = @file_get_contents($count_file);
-        $total_views += (int)$view_content;
-    }
-    error_log("Stat Read [{$folder_path}]: .count exists=" . (file_exists($count_file) ? 'yes' : 'no') . " content='{$view_content}' total_views={$total_views}");
-
-    $download_content = 'not_found';
-    if (file_exists($download_count_file)) {
-        $download_content = @file_get_contents($download_count_file);
-        $total_downloads += (int)$download_content;
-    }
-    error_log("Stat Read [{$folder_path}]: .download_count exists=" . (file_exists($download_count_file) ? 'yes' : 'no') . " content='{$download_content}' total_downloads={$total_downloads}");
-
-    try {
-        $iterator = new DirectoryIterator($folder_path);
-        foreach ($iterator as $fileinfo) {
-            if ($fileinfo->isDir() && !$fileinfo->isDot()) {
-                $sub_dir_path = $fileinfo->getPathname();
-                error_log("Stat Recursing into: {$sub_dir_path}");
-                $sub_stats = getFolderStats($sub_dir_path); // Recursive call
-                $total_views += $sub_stats['views'];
-                $total_downloads += $sub_stats['downloads'];
-                error_log("Stat Returned from [{$sub_dir_path}]: views={$sub_stats['views']}, downloads={$sub_stats['downloads']}. New totals: views={$total_views}, downloads={$total_downloads}");
-            }
-        }
-    } catch (Exception $e) {
-         error_log("Error reading stats recursively in {$folder_path}: " . $e->getMessage());
-    }
-    return ['views' => $total_views, 'downloads' => $total_downloads];
-}
-
 /**
  * Create a thumbnail image using GD library.
  * 
@@ -428,11 +389,25 @@ switch ($action) {
 
             // Process the selected directories (filtered or random)
             $final_dirs_data = [];
+            $folder_stats = []; // Map folder_name => stats
+
+            // Fetch stats for the directories to process in one query
+            if (!empty($dirs_to_process)) {
+                try {
+                    $placeholders = implode(',', array_fill(0, count($dirs_to_process), '?'));
+                    $sql = "SELECT folder_name, views FROM folder_stats WHERE folder_name IN ({$placeholders})";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute($dirs_to_process);
+                    $folder_stats = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // folder_name => views
+                } catch (PDOException $e) {
+                    error_log("[list_dirs] Failed to fetch folder stats: " . $e->getMessage());
+                    // Continue without stats if query fails
+                }
+            }
             
             foreach ($dirs_to_process as $dir_name) {
                  $dir_path_absolute = IMAGE_ROOT . DIRECTORY_SEPARATOR . $dir_name;
-                 $count_file = $dir_path_absolute . '/.count';
-                 $views = file_exists($count_file) ? (int)@file_get_contents($count_file) : 0;
+                 $views = $folder_stats[$dir_name] ?? 0; // Get views from DB result, default 0
 
                  // --- Thumbnail Logic --- 
                  $thumbnail_relative_path = null;
@@ -513,11 +488,14 @@ switch ($action) {
 
             // Increment view count only on first page load
             if ($page === 1 && !empty($safe_relative_path)) {
-                @error_log("[list_sub_items] Incrementing view count for: '{$full_path}'"); // LSI LOG 7
-                $count_file = $full_path . '/.count';
-                $current_views = file_exists($count_file) ? (int)@file_get_contents($count_file) : 0;
-                if (@file_put_contents($count_file, $current_views + 1) === false) {
-                    @error_log("[list_sub_items] WARNING: Failed to write view count to: '{$count_file}'");
+                @error_log("[list_sub_items] Incrementing view count for: '{$safe_relative_path}' in DB"); // LSI LOG 7 UPDATED
+                try {
+                    $sql = "INSERT INTO folder_stats (folder_name, views) VALUES (?, 1) 
+                            ON CONFLICT(folder_name) DO UPDATE SET views = views + 1";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute([$safe_relative_path]);
+                } catch (PDOException $e) {
+                    @error_log("[list_sub_items] WARNING: Failed to increment view count in DB for '{$safe_relative_path}': " . $e->getMessage());
                 }
             }
 
@@ -726,13 +704,15 @@ switch ($action) {
              }
              @error_log("[download_zip] PHP zip extension is enabled."); // DZ LOG 5
 
-             // --- Increment Download Count --- 
-             $download_count_file = $full_path . '/.download_count';
-             $current_downloads = file_exists($download_count_file) ? (int)@file_get_contents($download_count_file) : 0;
-             if (@file_put_contents($download_count_file, $current_downloads + 1) === false) {
-                 @error_log("[download_zip] WARNING: Failed to write download count to: '{$download_count_file}'");
-             } else {
-                 @error_log("[download_zip] Incremented download count."); // DZ LOG 6
+             // --- Increment Download Count in DB --- 
+             try {
+                 $sql = "INSERT INTO folder_stats (folder_name, downloads) VALUES (?, 1) 
+                         ON CONFLICT(folder_name) DO UPDATE SET downloads = downloads + 1";
+                 $stmt = $pdo->prepare($sql);
+                 $stmt->execute([$safe_relative_path]);
+                 @error_log("[download_zip] Incremented download count in DB for '{$safe_relative_path}'."); // DZ LOG 6 UPDATED
+             } catch (PDOException $e) {
+                 @error_log("[download_zip] WARNING: Failed to increment download count in DB for '{$safe_relative_path}': " . $e->getMessage());
              }
 
              // --- Create Zip --- 
@@ -894,6 +874,22 @@ switch ($action) {
             }
             error_log("Finished querying protected folders. Found: " . count($protected_status) . " (LOG 4)");
 
+            // Get stats from DB
+            $folder_stats = [];
+            try {
+                // Fetch stats only for top-level directories
+                // We can identify top-level by checking if folder_name does not contain '/' 
+                // Or simply fetch all and filter later if needed, but let's try to filter in SQL
+                $stmt = $pdo->query("SELECT folder_name, views, downloads FROM folder_stats WHERE INSTR(folder_name, '/') = 0"); 
+                while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $folder_stats[$row['folder_name']] = ['views' => $row['views'], 'downloads' => $row['downloads']];
+                }
+                 error_log("Fetched stats for " . count($folder_stats) . " top-level folders from DB. (LOG 4.5)");
+            } catch (PDOException $e) {
+                 error_log("ERROR fetching folder stats for admin: " . $e->getMessage() . " (LOG 4.6)");
+                // Continue without stats if DB query fails
+            }
+
             error_log("Starting DirectoryIterator for IMAGE_ROOT: " . IMAGE_ROOT . " (LOG 5)");
             $iterator = new DirectoryIterator(IMAGE_ROOT);
             
@@ -908,9 +904,9 @@ switch ($action) {
                         continue; 
                     }
                     $dir_path = $fileinfo->getPathname();
-                    error_log("Getting stats for: {$dir_path} (LOG 7)");
-                    $stats = getFolderStats($dir_path); 
-                    error_log("Stats for '{$dir_name}': Views={$stats['views']}, Downloads={$stats['downloads']} (LOG 8)");
+                    // Get stats from the DB results fetched earlier
+                    $stats = $folder_stats[$dir_name] ?? ['views' => 0, 'downloads' => 0];
+                    error_log("Stats for '{$dir_name}' (from DB): Views={$stats['views']}, Downloads={$stats['downloads']} (LOG 8 UPDATED)");
                     $folders_data[] = [
                         'name' => $dir_name,
                         'protected' => isset($protected_status[$dir_name]),
