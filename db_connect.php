@@ -65,10 +65,14 @@ try {
 // Ensure folder_stats table exists
 try {
     if ($pdo) { // Only proceed if connection was successful
+        // Create folder_stats table
         $pdo->exec("CREATE TABLE IF NOT EXISTS folder_stats (\r\n            folder_name TEXT PRIMARY KEY,\r\n            views INTEGER DEFAULT 0,\r\n            downloads INTEGER DEFAULT 0\r\n        )");
+        
+        // Create folder_passwords table
+        $pdo->exec("CREATE TABLE IF NOT EXISTS folder_passwords (\r\n            folder_name TEXT PRIMARY KEY,\r\n            password_hash TEXT NOT NULL\r\n        )");
     }
 } catch (PDOException $e) {
-    error_log("Failed to create or check folder_stats table: " . $e->getMessage());
+    error_log("Failed to create or check database tables (folder_stats, folder_passwords): " . $e->getMessage());
     // Depending on requirements, you might want to throw this error
     // or handle it gracefully, allowing the script to continue without stats table.
 }
