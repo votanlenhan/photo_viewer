@@ -1,4 +1,5 @@
 images/
 cache/
 logs/
-
+# Database files
+database.sqlite

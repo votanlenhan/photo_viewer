@@ -9,20 +9,16 @@ ini_set('error_log', __DIR__ . '/logs/php-error.log'); // Log to logs/php-error.
 error_reporting(E_ALL); // Report all errors
 
 // --- Test Log Write ---
-@error_log("API Step 1: Script started");
 
-// --- Bắt đầu session và set header JSON --- 
+// --- Bắt đầu session và set header JSON ---
 // NOTE: Error display might interfere with JSON header if error occurs before header() call.
 try {
     if (session_status() == PHP_SESSION_NONE) {
-        @error_log("API Step 2: Attempting session_start()");
         session_start();
-        @error_log("API Step 3: session_start() completed");
     } else {
-        @error_log("API Step 2/3: Session already active");
     }
 } catch (Throwable $e) {
-    @error_log("FATAL ERROR during session start: " . $e->getMessage());
+    error_log("FATAL ERROR during session start: " . $e->getMessage());
     http_response_code(500);
     ob_end_clean();
     echo json_encode(['error' => 'Lỗi khởi tạo session.']);
@@ -32,16 +28,13 @@ header('Content-Type: application/json; charset=utf-8'); // Restore JSON header
 
 // --- Kết nối DB (Vẫn include để kiểm tra) ---
 try {
-    @error_log("API Step 5: Attempting require_once db_connect.php");
     require_once 'db_connect.php';
-    @error_log("API Step 6: require_once db_connect.php completed");
     if (!isset($pdo) || !$pdo instanceof PDO) {
-        @error_log("API Error: \$pdo object is not set or not a PDO instance after require_once");
+        error_log("API Error: \$pdo object is not set or not a PDO instance after require_once");
          throw new Exception("PDO connection object not created/available or is not a PDO instance.");
     }
-    @error_log("API Step 7: \$pdo object confirmed to be a PDO instance");
 } catch (Throwable $e) { // Catch any error/exception during include
-    @error_log("FATAL ERROR during DB connection: " . $e->getMessage());
+    error_log("FATAL ERROR during DB connection: " . $e->getMessage());
     http_response_code(500);
     ob_end_clean();
     echo json_encode(['error' => 'Lỗi kết nối cơ sở dữ liệu.', 'details' => $e->getMessage()]);
@@ -51,14 +44,12 @@ try {
 // --- Định nghĩa Hằng số và Biến toàn cục ---
 // SECURITY: Ensure IMAGE_ROOT is correctly configured and not pointing outside intended scope.
 try {
-    @error_log("API Step 8: Attempting define IMAGE_ROOT");
-    define('IMAGE_ROOT', realpath(__DIR__ . '/images')); 
-    @error_log("API Step 9: IMAGE_ROOT defined as: " . (IMAGE_ROOT ?: '[Error or Not Found]'));
+    define('IMAGE_ROOT', realpath(__DIR__ . '/images'));
     if (!IMAGE_ROOT) {
          throw new Exception("Failed to resolve IMAGE_ROOT path. Check if 'images' directory exists and permissions.");
     }
 } catch (Throwable $e) {
-    @error_log("FATAL ERROR defining IMAGE_ROOT: " . $e->getMessage());
+    error_log("FATAL ERROR defining IMAGE_ROOT: " . $e->getMessage());
     http_response_code(500);
     ob_end_clean();
     echo json_encode(['error' => 'Lỗi cấu hình đường dẫn ảnh.', 'details' => $e->getMessage()]);
@@ -67,7 +58,6 @@ try {
 
 // OPTIMIZATION: Consider if allowed_ext needs to be dynamic or configurable.
 $allowed_ext = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-@error_log("API Step 10: Constants and variables defined");
 
 // --- Các Hàm Hỗ Trợ ---
 
@@ -159,11 +149,10 @@ function check_folder_access($folder_relative_path) {
 
 /** Tìm ảnh đầu tiên đệ quy */
 function find_first_image_recursive($start_path, $base_folder_name, &$allowed_ext) {
-    @error_log("[find_thumb] Searching in: '{$start_path}' with base: '{$base_folder_name}'");
     try {
         // Check read permissions before iterating
         if (!is_readable($start_path)) {
-            @error_log("[find_thumb] Directory not readable: '{$start_path}'");
+            error_log("[find_thumb] Directory not readable: '{$start_path}'");
             return null;
         }
         $iterator = new DirectoryIterator($start_path);
@@ -176,30 +165,24 @@ function find_first_image_recursive($start_path, $base_folder_name, &$allowed_ex
             // Priority 1: Find direct image in current directory
             if ($fileinfo->isFile() && in_array(strtolower($fileinfo->getExtension()), $allowed_ext, true)) {
                 $found_thumb = $base_folder_name . '/' . $fileinfo->getFilename();
-                @error_log("[find_thumb] Direct image found: '{$found_thumb}' in '{$start_path}'");
                 return $found_thumb;
             }
             // Priority 2: Remember the first subdirectory encountered
             if ($first_sub_dir_path === null && $fileinfo->isDir()) {
                 $first_sub_dir_path = $fileinfo->getPathname();
                 $first_sub_dir_name = $fileinfo->getFilename();
-                @error_log("[find_thumb] First subdirectory found: '{$first_sub_dir_path}'");
             }
         }
 
         // Priority 3: If no direct image found, search in the first subdirectory recursively
         if ($first_sub_dir_path !== null) {
-            @error_log("[find_thumb] No direct image in '{$start_path}'. Recursing into first sub: '{$first_sub_dir_path}'");
-            // Recursively call, updating the base folder name for relative path construction
             return find_first_image_recursive($first_sub_dir_path, $base_folder_name . '/' . $first_sub_dir_name, $allowed_ext);
         } else {
-            @error_log("[find_thumb] No direct image and no subdirectories found in: '{$start_path}'");
         }
 
     } catch (Throwable $e) { // Catch specific exceptions if needed (e.g., UnexpectedValueException)
-        @error_log("[find_thumb] ERROR searching in {$start_path}: " . $e->getMessage());
+        error_log("[find_thumb] ERROR searching in {$start_path}: " . $e->getMessage());
     }
-    @error_log("[find_thumb] No thumbnail found for base '{$base_folder_name}' starting from '{$start_path}'");
     return null; // No image found
 }
 
@@ -330,30 +313,24 @@ function create_thumbnail($source_path, $cache_path, $thumb_size = 150) {
 }
 
 // --- KIỂM TRA BAN ĐẦU ---
-@error_log("API Step 11: Initial IMAGE_ROOT check");
 if (!IMAGE_ROOT || !is_dir(IMAGE_ROOT) || !is_readable(IMAGE_ROOT)) {
     // Ensure appropriate permissions are set on the server.
     $error_msg = "Lỗi Server: Không thể truy cập thư mục ảnh gốc ('" . IMAGE_ROOT . "'). Check existence and permissions.";
-    @error_log($error_msg);
+    error_log($error_msg);
     json_error($error_msg, 500);
 }
-@error_log("API Step 12: Initial IMAGE_ROOT check passed");
 
 // --- Restore Router and Switch ---
 
 // --- ROUTER XỬ LÝ ACTION ---
-@error_log("API Step 13: Attempting to read action from REQUEST");
 $action = $_REQUEST['action'] ?? ''; // Use REQUEST again to handle POST actions
-@error_log("API Step 14: Action read as '{$action}'");
 
 // --- Process search term (can come from GET) ---
 $search_term = $_GET['search'] ?? null;
 if ($search_term !== null) {
     $search_term = trim($search_term);
 }
-@error_log("API Step 15: Search term is '" . ($search_term ?? 'null') . "'");
 
-@error_log("API Step 16: Entering switch statement");
 switch ($action) {
 
     case 'list_dirs':
@@ -379,12 +356,10 @@ switch ($action) {
                          $dirs_to_process[] = $dir_name;
                      }
                  }
-                 error_log("[list_dirs] Search found " . count($dirs_to_process) . " directories for term '{$search_term}'");
             } else {
                 // No search term: Shuffle and take up to 10 random
                 shuffle($all_dirs_temp);
                 $dirs_to_process = array_slice($all_dirs_temp, 0, 10); // Take first 10 after shuffling
-                 error_log("[list_dirs] Initial load, showing " . count($dirs_to_process) . " random directories.");
             }
 
             // Process the selected directories (filtered or random)
@@ -430,7 +405,6 @@ switch ($action) {
                               $create_success = create_thumbnail($original_image_absolute_path, $cache_filepath_absolute, $thumb_size);
                               if ($create_success) {
                                    $thumbnail_relative_path = $cache_filepath_relative;
-                                   error_log("[list_dirs] Created thumbnail for '{$dir_name}' -> {$cache_filepath_relative}");
                               } else {
                                    error_log("[list_dirs] WARNING: Failed to create thumbnail for: {$original_image_relative_path} (create_thumbnail returned false)");
                               }
@@ -462,57 +436,44 @@ switch ($action) {
 
     case 'list_sub_items':
         try {
-            @error_log("[list_sub_items] Entering action."); // LSI LOG 1
             $dir_param = $_GET['dir'] ?? '';
-            @error_log("[list_sub_items] dir param: '{$dir_param}'"); // LSI LOG 2
             
-            @error_log("[list_sub_items] Sanitizing subdir..."); // LSI LOG 3
             $safe_relative_path = sanitize_subdir($dir_param);
             if ($safe_relative_path === null) {
-                 @error_log("[list_sub_items] Invalid subdir after sanitization.");
                  json_error("Đường dẫn thư mục không hợp lệ.", 400);
             }
-            @error_log("[list_sub_items] Sanitized path: '{$safe_relative_path}'"); // LSI LOG 4
 
             $full_path = IMAGE_ROOT . (empty($safe_relative_path) ? '' : DIRECTORY_SEPARATOR . $safe_relative_path);
-            @error_log("[list_sub_items] Full path: '{$full_path}'"); // LSI LOG 5
             if (!is_dir($full_path)) {
-                 @error_log("[list_sub_items] Directory does not exist: '{$full_path}'");
                  json_error("Thư mục không tồn tại.", 404);
             }
             
             $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
             $limit = isset($_GET['limit']) ? max(1, (int)$_GET['limit']) : 50; 
             $offset = ($page - 1) * $limit;
-            @error_log("[list_sub_items] Pagination: page={$page}, limit={$limit}, offset={$offset}"); // LSI LOG 6
 
             // Increment view count only on first page load
             if ($page === 1 && !empty($safe_relative_path)) {
-                @error_log("[list_sub_items] Incrementing view count for: '{$safe_relative_path}' in DB"); // LSI LOG 7 UPDATED
                 try {
                     $sql = "INSERT INTO folder_stats (folder_name, views) VALUES (?, 1) 
                             ON CONFLICT(folder_name) DO UPDATE SET views = views + 1";
                     $stmt = $pdo->prepare($sql);
                     $stmt->execute([$safe_relative_path]);
                 } catch (PDOException $e) {
-                    @error_log("[list_sub_items] WARNING: Failed to increment view count in DB for '{$safe_relative_path}': " . $e->getMessage());
+                    error_log("[list_sub_items] WARNING: Failed to increment view count in DB for '{$safe_relative_path}': " . $e->getMessage());
                 }
             }
 
             // Check access
             if (!empty($safe_relative_path)) {
-                @error_log("[list_sub_items] Checking folder access for: '{$safe_relative_path}'"); // LSI LOG 8
                 $access = check_folder_access($safe_relative_path);
                 if (!$access['authorized']) {
                     if (!empty($access['password_required'])) {
-                        @error_log("[list_sub_items] Access denied, password required for: '{$safe_relative_path}'");
                         json_response(['password_required' => true, 'folder' => $safe_relative_path], 401);
                     }
                     $error_msg = isset($access['error']) ? $access['error'] : 'Không được phép truy cập thư mục này.';
-                    @error_log("[list_sub_items] Access denied for '{$safe_relative_path}': {$error_msg}");
                     json_error($error_msg, 403);
                 }
-                 @error_log("[list_sub_items] Access granted for: '{$safe_relative_path}'"); // LSI LOG 9
             }
 
             // List items
@@ -557,7 +518,6 @@ switch ($action) {
                     $decoded_data = @json_decode($json_content, true);
                     if (is_array($decoded_data)) { // Check if decode was successful and is an array
                          $all_images_metadata_cache = $decoded_data;
-                         error_log("[list_sub_items] Successfully read metadata cache for: {$safe_relative_path}");
                     } else {
                          error_log("[list_sub_items] WARNING: Failed to decode JSON metadata cache for: {$safe_relative_path}");
                     }
@@ -588,7 +548,6 @@ switch ($action) {
                  $json_to_write = json_encode($all_images_metadata_cache, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
                  if ($json_to_write !== false) {
                     if (@file_put_contents($metadata_file, $json_to_write) !== false) {
-                         error_log("[list_sub_items] Successfully wrote metadata cache file: {$metadata_file}");
                     } else {
                          error_log("[list_sub_items] ERROR: Failed to write metadata cache file (permissions?): {$metadata_file}");
                     }
@@ -620,13 +579,11 @@ switch ($action) {
                 try { // Add try-catch around file operations
                     if (file_exists($thumbnail_absolute_cache_path)) {
                         $generated_thumb_path = $thumbnail_relative_cache_path;
-                        // error_log("[list_sub_items] Thumbnail cache hit for: {$original_relative_path}"); 
                     } else {
                         // Check if original exists and is readable before trying to create thumb
                         if (is_readable($original_absolute_path)) {
                             if (create_thumbnail($original_absolute_path, $thumbnail_absolute_cache_path, $thumb_size)) {
                                 $generated_thumb_path = $thumbnail_relative_cache_path;
-                                error_log("[list_sub_items] Created thumbnail for: {$original_relative_path} -> {$thumbnail_relative_cache_path}");
                             } else {
                                 error_log("[list_sub_items] WARNING: Failed to create thumbnail for: {$original_relative_path} (create_thumbnail returned false)");
                             }
@@ -676,33 +633,24 @@ switch ($action) {
         $temp_zip_file = null;
 
         try {
-             @error_log("[download_zip] Entering action. dir='{$dir_param}'"); // DZ LOG 1
-
-             // --- Validation ---
-             if ($dir_param === null) throw new Exception("Thiếu tham số thư mục.", 400);
-             
              $safe_relative_path = sanitize_subdir($dir_param);
              if ($safe_relative_path === null) throw new Exception("Đường dẫn thư mục không hợp lệ.", 400);
              if (empty($safe_relative_path)) throw new Exception("Không thể tải toàn bộ thư viện.", 400);
              
              $full_path = IMAGE_ROOT . DIRECTORY_SEPARATOR . $safe_relative_path;
              if (!is_dir($full_path)) throw new Exception("Thư mục không tồn tại.", 404);
-             @error_log("[download_zip] Validated path: '{$full_path}'"); // DZ LOG 2
 
              // --- Access Check ---
-             @error_log("[download_zip] Checking access for: '{$safe_relative_path}'"); // DZ LOG 3
              $access = check_folder_access($safe_relative_path);
              if (!$access['authorized']) {
                  throw new Exception("Yêu cầu xác thực để tải thư mục này.", 403);
              }
-             @error_log("[download_zip] Access granted."); // DZ LOG 4
 
              // --- Check Zip Extension ---
              if (!extension_loaded('zip')) {
-                 @error_log("[download_zip] PHP extension 'zip' is not enabled.");
+                 error_log("[download_zip] PHP extension 'zip' is not enabled.");
                  throw new Exception("Tính năng nén file ZIP chưa được kích hoạt trên server.", 501);
              }
-             @error_log("[download_zip] PHP zip extension is enabled."); // DZ LOG 5
 
              // --- Increment Download Count in DB --- 
              try {
@@ -710,9 +658,8 @@ switch ($action) {
                          ON CONFLICT(folder_name) DO UPDATE SET downloads = downloads + 1";
                  $stmt = $pdo->prepare($sql);
                  $stmt->execute([$safe_relative_path]);
-                 @error_log("[download_zip] Incremented download count in DB for '{$safe_relative_path}'."); // DZ LOG 6 UPDATED
              } catch (PDOException $e) {
-                 @error_log("[download_zip] WARNING: Failed to increment download count in DB for '{$safe_relative_path}': " . $e->getMessage());
+                 error_log("[download_zip] WARNING: Failed to increment download count in DB for '{$safe_relative_path}': " . $e->getMessage());
              }
 
              // --- Create Zip --- 
@@ -720,17 +667,15 @@ switch ($action) {
              $zip_filename = preg_replace('/[^a-zA-Z0-9_-]+/', '_', basename($safe_relative_path)) . '.zip';
              $temp_zip_file = tempnam(sys_get_temp_dir(), 'photozip_');
              if ($temp_zip_file === false) {
-                  @error_log("[download_zip] Failed to create temp file using tempnam(). Check sys_temp_dir permissions.");
+                  error_log("[download_zip] Failed to create temp file using tempnam(). Check sys_temp_dir permissions.");
                   throw new Exception("Không thể tạo file nén tạm.", 500);
              }
-             @error_log("[download_zip] Created temp file: '{$temp_zip_file}'"); // DZ LOG 7
 
              if ($zip->open($temp_zip_file, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE) {
                  @unlink($temp_zip_file); // Clean up failed temp file
-                 @error_log("[download_zip] Cannot open temp zip file for writing: {$temp_zip_file}");
+                 error_log("[download_zip] Cannot open temp zip file for writing: {$temp_zip_file}");
                  throw new Exception("Không thể mở file nén tạm để ghi.", 500);
              }
-             @error_log("[download_zip] Opened temp zip file successfully."); // DZ LOG 8
 
              // Add files recursively
              $files_added_count = 0;
@@ -738,34 +683,27 @@ switch ($action) {
                  new RecursiveDirectoryIterator($full_path, RecursiveDirectoryIterator::SKIP_DOTS),
                  RecursiveIteratorIterator::LEAVES_ONLY
              );
-             @error_log("[download_zip] Starting to add files..."); // DZ LOG 9
              foreach ($files as $name => $file) {
                  if (!$file->isDir()) {
                      $filePath = $file->getRealPath();
                      $relativePath = substr($filePath, strlen($full_path) + 1);
                      if ($zip->addFile($filePath, $relativePath)) {
                          $files_added_count++;
-                         // @error_log("[download_zip] Added: {$relativePath}"); // Too noisy usually
                      } else {
-                          @error_log("[download_zip] WARNING: Failed to add file to zip: " . $filePath . " (Relative: {$relativePath})");
+                          error_log("[download_zip] WARNING: Failed to add file to zip: " . $filePath . " (Relative: {$relativePath})");
                      }
                  }
              }
-             @error_log("[download_zip] Finished adding files. Count: {$files_added_count}"); // DZ LOG 10
 
              $status = $zip->close();
              if ($status === false) {
                  @unlink($temp_zip_file);
-                 @error_log("[download_zip] Failed to close zip archive.");
+                 error_log("[download_zip] Failed to close zip archive.");
                  throw new Exception("Không thể hoàn tất file nén.", 500);
              }
-              @error_log("[download_zip] Closed zip archive successfully."); // DZ LOG 11
 
              // --- Send File --- 
              if ($files_added_count > 0 && file_exists($temp_zip_file)) {
-                 @error_log("[download_zip] Preparing to send zip file '{$zip_filename}' (Size: " . filesize($temp_zip_file) . ")."); // DZ LOG 12
-                 
-                 // !!! Crucial: Clear any output buffer BEFORE sending headers !!!
                  if (ob_get_level()) ob_end_clean(); 
                  
                  header('Content-Type: application/zip');
@@ -777,12 +715,11 @@ switch ($action) {
 
                  // Send the file
                  readfile($temp_zip_file);
-                 @error_log("[download_zip] File sent successfully."); // DZ LOG 13
 
                  unlink($temp_zip_file); // Delete temp file after sending
                  exit; // IMPORTANT: Stop script execution after sending file
              } else {
-                 @error_log("[download_zip] No files added or temp file missing. Added: {$files_added_count}, Exists: " . file_exists($temp_zip_file));
+                 error_log("[download_zip] No files added or temp file missing. Added: {$files_added_count}, Exists: " . file_exists($temp_zip_file));
                  throw new Exception("Không có file nào hợp lệ trong thư mục để nén.", 404);
              }
 
@@ -794,7 +731,7 @@ switch ($action) {
              
              $http_code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 500; // Use exception code if it's a valid HTTP status
              $error_message = $e->getMessage();
-             @error_log("[download_zip] FATAL ERROR (HTTP {$http_code}): {$error_message}\nStack Trace:\n" . $e->getTraceAsString()); // DZ LOG 14
+             error_log("[download_zip] FATAL ERROR (HTTP {$http_code}): {$error_message}\nStack Trace:\n" . $e->getTraceAsString()); // DZ LOG 14
 
              // !!! Crucial: Clear buffer before sending error output !!!
              if (ob_get_level()) ob_end_clean();
@@ -807,72 +744,56 @@ switch ($action) {
         break;
 
     case 'verify_password':
-        @error_log("[verify_password] Entering action."); // VP LOG 1
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-             @error_log("[verify_password] Invalid method: {$_SERVER['REQUEST_METHOD']}");
              json_error("Phương thức không hợp lệ.", 405);
         }
 
         $folder_param = $_POST['folder'] ?? null;
         $password_attempt = $_POST['password'] ?? null;
-        @error_log("[verify_password] Received folder='{$folder_param}', password provided=" . ($password_attempt !== null ? 'yes' : 'no')); // VP LOG 2
 
-        @error_log("[verify_password] Sanitizing subdir: '{$folder_param}'"); // VP LOG 3
         $safe_relative_path = sanitize_subdir($folder_param);
 
         if ($safe_relative_path === null || $password_attempt === null || $password_attempt === '') { // Also check password presence
-            @error_log("[verify_password] Invalid input: path='{$safe_relative_path}', password empty?=" . empty($password_attempt));
             json_error("Thiếu thông tin thư mục hoặc mật khẩu.", 400);
         }
-        @error_log("[verify_password] Sanitized path: '{$safe_relative_path}'"); // VP LOG 4
 
         try {
-            @error_log("[verify_password] Preparing DB query for: '{$safe_relative_path}'"); // VP LOG 5
             $stmt = $pdo->prepare("SELECT password_hash FROM folder_passwords WHERE folder_name = ? LIMIT 1");
             $stmt->execute([$safe_relative_path]);
             $row = $stmt->fetch();
-            @error_log("[verify_password] DB query executed. Row found: " . ($row ? 'yes' : 'no')); // VP LOG 6
 
             if ($row) {
                 $correct_hash = $row['password_hash'];
-                 @error_log("[verify_password] Hash found. Verifying password..."); // VP LOG 7
                  if (password_verify($password_attempt, $correct_hash)) {
-                    @error_log("[verify_password] Password VERIFIED for '{$safe_relative_path}'"); // VP LOG 8
                     $_SESSION['authorized_folders'][$safe_relative_path] = true;
                     json_response(['authorized' => true]);
                  } else {
-                    @error_log("[verify_password] Password INCORRECT for '{$safe_relative_path}'"); // VP LOG 9
                     json_response(['authorized' => false, 'error' => 'Mật khẩu không đúng.'], 401);
                  }
             } else {
-                // Should not happen if password prompt was shown, but handle defensively
-                @error_log("[verify_password] No password hash found in DB for '{$safe_relative_path}', but verification was attempted?"); // VP LOG 10
+                error_log("[verify_password] No password hash found in DB for '{$safe_relative_path}', but verification was attempted?");
                 json_response(['authorized' => false, 'error' => 'Thư mục này không yêu cầu mật khẩu (lỗi logic?).'], 400); 
             }
         } catch (Throwable $e) {
-            @error_log("[verify_password] FATAL ERROR for '{$safe_relative_path}': " . $e->getMessage() . "\nStack Trace:\n" . $e->getTraceAsString()); // VP LOG 11
+            error_log("[verify_password] FATAL ERROR for '{$safe_relative_path}': " . $e->getMessage() . "\nStack Trace:\n" . $e->getTraceAsString());
             json_error("Lỗi server khi xác thực mật khẩu. " . $e->getMessage(), 500);
         }
         break;
 
     case 'admin_list_folders':
-        @error_log("Inside SWITCH, action: admin_list_folders (LOG 1)");
         if (empty($_SESSION['admin_logged_in'])) {
              error_log("Admin not logged in for admin_list_folders.");
              json_error("Yêu cầu đăng nhập Admin.", 403);
         }
         $admin_search_term = $search_term; // Use the already processed search_term
-        error_log("Admin search term: '" . ($admin_search_term ?? 'null') . "' (LOG 2)");
         
         try {
             $folders_data = [];
             $protected_status = [];
-            error_log("Querying protected folders... (LOG 3)");
             $stmt = $pdo->query("SELECT folder_name FROM folder_passwords");
             while ($row = $stmt->fetchColumn()) {
                 $protected_status[$row] = true;
             }
-            error_log("Finished querying protected folders. Found: " . count($protected_status) . " (LOG 4)");
 
             // Get stats from DB
             $folder_stats = [];
@@ -884,13 +805,11 @@ switch ($action) {
                 while($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                     $folder_stats[$row['folder_name']] = ['views' => $row['views'], 'downloads' => $row['downloads']];
                 }
-                 error_log("Fetched stats for " . count($folder_stats) . " top-level folders from DB. (LOG 4.5)");
             } catch (PDOException $e) {
-                 error_log("ERROR fetching folder stats for admin: " . $e->getMessage() . " (LOG 4.6)");
+                error_log("ERROR fetching folder stats for admin: " . $e->getMessage());
                 // Continue without stats if DB query fails
             }
 
-            error_log("Starting DirectoryIterator for IMAGE_ROOT: " . IMAGE_ROOT . " (LOG 5)");
             $iterator = new DirectoryIterator(IMAGE_ROOT);
             
             foreach ($iterator as $fileinfo) {
@@ -898,15 +817,12 @@ switch ($action) {
                 
                 if ($fileinfo->isDir()) {
                     $dir_name = $fileinfo->getFilename();
-                    error_log("Processing directory: {$dir_name} (LOG 6)");
                     if ($admin_search_term !== null && mb_stripos($dir_name, $admin_search_term, 0, 'UTF-8') === false) {
-                        error_log("Skipping '{$dir_name}' due to search term.");
                         continue; 
                     }
                     $dir_path = $fileinfo->getPathname();
                     // Get stats from the DB results fetched earlier
                     $stats = $folder_stats[$dir_name] ?? ['views' => 0, 'downloads' => 0];
-                    error_log("Stats for '{$dir_name}' (from DB): Views={$stats['views']}, Downloads={$stats['downloads']} (LOG 8 UPDATED)");
                     $folders_data[] = [
                         'name' => $dir_name,
                         'protected' => isset($protected_status[$dir_name]),
@@ -918,26 +834,21 @@ switch ($action) {
                 }
             } // End foreach
             
-            error_log("Finished iterating directories. Sorting... (LOG 10)");
             usort($folders_data, fn($a, $b) => strnatcasecmp($a['name'], $b['name'])); 
             
-            error_log("Sending JSON response for admin_list_folders. (LOG 11)");
             json_response(['folders' => $folders_data]);
             
         } catch (Throwable $e) { 
-            error_log("FATAL ERROR in admin_list_folders: " . $e->getMessage() . "\nStack Trace:\n" . $e->getTraceAsString() . " (LOG 12)");
+            error_log("FATAL ERROR in admin_list_folders: " . $e->getMessage() . "\nStack Trace:\n" . $e->getTraceAsString());
             json_error("Không thể lấy danh sách thư mục quản lý. Lỗi: " . $e->getMessage(), 500);
         }
         break;
 
     case 'admin_set_password':
-        @error_log("Inside SWITCH, action: admin_set_password");
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            error_log("admin_set_password: Invalid method - {$_SERVER['REQUEST_METHOD']}");
             json_error("Phương thức không hợp lệ.", 405);
         }
         if (empty($_SESSION['admin_logged_in'])) {
-            error_log("admin_set_password: Admin not logged in.");
             json_error("Yêu cầu đăng nhập Admin.", 403);
         }
 
@@ -945,14 +856,10 @@ switch ($action) {
         $password = $_POST['password'] ?? '';
         $safe_folder_name = basename(str_replace('\\', '/', $folder_param)); 
 
-        error_log("admin_set_password: Received folder='{$folder_param}' (Safe='{$safe_folder_name}'), password provided=" . !empty($password));
-
         if (empty($safe_folder_name) || !is_dir(IMAGE_ROOT . DIRECTORY_SEPARATOR . $safe_folder_name)) {
-             error_log("admin_set_password: Invalid folder name or folder does not exist.");
              json_error("Tên thư mục cấp 1 không hợp lệ hoặc không tồn tại.", 400);
         }
          if ($password === '') {
-             error_log("admin_set_password: Password cannot be empty.");
              json_error("Mật khẩu không được để trống.", 400);
          }
 
@@ -966,7 +873,6 @@ switch ($action) {
             $stmt = $pdo->prepare($sql);
             if ($stmt->execute([$safe_folder_name, $hash])) {
                 unset($_SESSION['authorized_folders'][$safe_folder_name]);
-                error_log("admin_set_password: Successfully set password for '{$safe_folder_name}'");
                 json_response(['success' => true, 'message' => "Đặt/Cập nhật mật khẩu thành công cho thư mục '" . htmlspecialchars($safe_folder_name) . "'."]);
             } else {
                  error_log("admin_set_password: DB execute failed.");
@@ -979,54 +885,41 @@ switch ($action) {
         break;
 
     case 'admin_remove_password':
-        @error_log("[admin_remove_password] Entering action."); // RP LOG 1
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-             @error_log("[admin_remove_password] Invalid method: {$_SERVER['REQUEST_METHOD']}");
              json_error("Phương thức không hợp lệ.", 405);
         }
         if (empty($_SESSION['admin_logged_in'])) {
-            @error_log("[admin_remove_password] Admin not logged in.");
             json_error("Yêu cầu đăng nhập Admin.", 403);
         }
 
         $folder_param = $_POST['folder'] ?? null;
-        @error_log("[admin_remove_password] Received folder='{$folder_param}'"); // RP LOG 2
         
         // Use the same validation as set_password
         $safe_folder_name = basename(str_replace('\\', '/', $folder_param));
 
         if (empty($safe_folder_name)) { // Also check folder existence? No, just delete entry if exists.
-             @error_log("[admin_remove_password] Invalid folder name parameter: '{$folder_param}' (Safe='{$safe_folder_name}')");
              json_error("Tên thư mục không hợp lệ.", 400);
         }
-        @error_log("[admin_remove_password] Validated folder name: '{$safe_folder_name}'"); // RP LOG 3
 
         try {
-            @error_log("[admin_remove_password] Preparing DB DELETE query for: '{$safe_folder_name}'"); // RP LOG 4
             $sql = "DELETE FROM folder_passwords WHERE folder_name = ?";
             $stmt = $pdo->prepare($sql);
-            @error_log("[admin_remove_password] Executing DB DELETE..."); // RP LOG 5
             $success = $stmt->execute([$safe_folder_name]);
             $affected_rows = $stmt->rowCount(); // Check how many rows were deleted
-            @error_log("[admin_remove_password] DB DELETE executed. Success: " . ($success ? 'yes' : 'no') . ", Rows affected: {$affected_rows}"); // RP LOG 6
 
-            @error_log("[admin_remove_password] Unsetting session key for: '{$safe_folder_name}'"); // RP LOG 7
             unset($_SESSION['authorized_folders'][$safe_folder_name]);
             
-            @error_log("[admin_remove_password] Sending success response."); // RP LOG 8
             json_response(['success' => true, 'message' => "Đã xóa mật khẩu (nếu có) cho thư mục '" . htmlspecialchars($safe_folder_name) . "'. Bị ảnh hưởng: {$affected_rows} dòng."]);
         } catch (Throwable $e) {
-            @error_log("[admin_remove_password] FATAL ERROR for '{$safe_folder_name}': " . $e->getMessage() . "\nStack Trace:\n" . $e->getTraceAsString()); // RP LOG 9
+            error_log("[admin_remove_password] FATAL ERROR for '{$safe_folder_name}': " . $e->getMessage() . "\nStack Trace:\n" . $e->getTraceAsString());
             json_error("Lỗi server khi xóa mật khẩu. " . $e->getMessage(), 500);
         }
         break;
 
     default:
-        @error_log("Inside SWITCH, action: default (Invalid action: '{$action}')");
         json_error("Hành động không hợp lệ: '{$action}'.", 400);
         break;
 }
-@error_log("API Step 17: Switch statement finished or bypassed."); // Should normally not be reached for valid actions
 
 // Clean up buffer if script reaches end without exit (should not happen)
 ob_end_flush(); 
