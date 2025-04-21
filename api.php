@@ -186,6 +186,140 @@ function find_first_image_recursive($start_path, $base_folder_name, &$allowed_ex
     return null; // No image found
 }
 
+/**
+ * Create a thumbnail image using GD library.
+ * (Restored for on-the-fly generation)
+ * 
+ * @param string $source_path Absolute path to the source image.
+ * @param string $cache_path Absolute path to save the thumbnail (INCLUDING the size subdirectory).
+ * @param int $thumb_size Desired width/height of the thumbnail (square).
+ * @return bool True on success, false on failure.
+ */
+function create_thumbnail($source_path, $cache_path, $thumb_size = 150) {
+    if (!extension_loaded('gd')) {
+        error_log("[API Thumbs] GD extension is not loaded. Cannot create thumbnail.");
+        return false;
+    }
+    
+    // Check if already exists to prevent race conditions if multiple requests hit simultaneously
+    if (file_exists($cache_path)) {
+        return true; 
+    }
+
+    try {
+        if (!is_readable($source_path)) {
+             error_log("[API Thumbs] create_thumbnail: Source image not readable: {$source_path}");
+             return false;
+        }
+        $image_info = @getimagesize($source_path);
+        if ($image_info === false) {
+             error_log("[API Thumbs] create_thumbnail: Failed to get image size for: {$source_path}");
+             return false;
+        }
+        $mime = $image_info['mime'];
+        $original_width = $image_info[0];
+        $original_height = $image_info[1];
+
+        // Create image resource based on mime type
+        $source_image = null;
+        switch ($mime) {
+            case 'image/jpeg':
+            case 'image/jpg':
+                $source_image = @imagecreatefromjpeg($source_path);
+                break;
+            case 'image/png':
+                $source_image = @imagecreatefrompng($source_path);
+                break;
+            case 'image/gif':
+                $source_image = @imagecreatefromgif($source_path);
+                break;
+            case 'image/webp':
+                 if (function_exists('imagecreatefromwebp')) {
+                     $source_image = @imagecreatefromwebp($source_path);
+                 } else {
+                    error_log("[API Thumbs] create_thumbnail: WebP is not supported by this GD version for: {$source_path}");
+                    return false;
+                 }
+                break;
+            default:
+                error_log("[API Thumbs] create_thumbnail: Unsupported image type '{$mime}' for: {$source_path}");
+                return false;
+        }
+
+        if ($source_image === false) {
+            error_log("[API Thumbs] create_thumbnail: Failed to create image resource from: {$source_path}");
+            return false;
+        }
+
+        // Calculate new dimensions
+        $ratio = $original_width / $original_height;
+        if ($original_width > $original_height) {
+            $thumb_width = $thumb_size;
+            $thumb_height = intval($thumb_size / $ratio);
+        } else {
+            $thumb_height = $thumb_size;
+            $thumb_width = intval($thumb_size * $ratio);
+        }
+
+        // Create the thumbnail canvas
+        $thumb_image = imagecreatetruecolor($thumb_width, $thumb_height);
+         if ($thumb_image === false) {
+            error_log("[API Thumbs] create_thumbnail: Failed to create true color image resource.");
+            imagedestroy($source_image);
+            return false;
+        }
+
+        // Handle transparency
+        if ($mime == 'image/png' || $mime == 'image/gif') {
+            imagealphablending($thumb_image, false);
+            imagesavealpha($thumb_image, true);
+            $transparent = imagecolorallocatealpha($thumb_image, 255, 255, 255, 127);
+            imagefilledrectangle($thumb_image, 0, 0, $thumb_width, $thumb_height, $transparent);
+        }
+
+        // Resize
+        if (!imagecopyresampled($thumb_image, $source_image, 0, 0, 0, 0, $thumb_width, $thumb_height, $original_width, $original_height)) {
+            error_log("[API Thumbs] create_thumbnail: imagecopyresampled failed.");
+            imagedestroy($source_image); 
+            imagedestroy($thumb_image);
+            return false;
+        }
+
+        // Save the thumbnail
+        $cache_dir = dirname($cache_path);
+        if (!is_dir($cache_dir)) {
+            if (!@mkdir($cache_dir, 0775, true)) {
+                 error_log("[API Thumbs] create_thumbnail: Failed to create cache directory: {$cache_dir}");
+                 imagedestroy($source_image); 
+                 imagedestroy($thumb_image);
+                 return false;
+            }
+        }
+
+        $save_success = imagejpeg($thumb_image, $cache_path, 85);
+
+        // Clean up resources
+        imagedestroy($source_image);
+        imagedestroy($thumb_image);
+
+        if (!$save_success) {
+             error_log("[API Thumbs] create_thumbnail: Failed to save thumbnail to: {$cache_path}");
+             if (file_exists($cache_path)) @unlink($cache_path);
+             return false;
+        }
+        
+        error_log("[API Thumbs] Created thumbnail on-the-fly: {$cache_path}"); // Log on-the-fly creation
+        return true;
+
+    } catch (Throwable $e) {
+        error_log("[API Thumbs] create_thumbnail: Exception while creating thumbnail for {$source_path} -> {$cache_path} : " . $e->getMessage());
+        if (isset($source_image) && is_resource($source_image)) imagedestroy($source_image);
+        if (isset($thumb_image) && is_resource($thumb_image)) imagedestroy($thumb_image);
+         if (file_exists($cache_path)) @unlink($cache_path);
+        return false;
+    }
+}
+
 // --- KIỂM TRA BAN ĐẦU ---
 if (!IMAGE_ROOT || !is_dir(IMAGE_ROOT) || !is_readable(IMAGE_ROOT)) {
     // Ensure appropriate permissions are set on the server.
@@ -268,15 +402,26 @@ switch ($action) {
                      $cache_filename = $cache_hash . '.jpg';
                      $cache_filepath_relative = 'cache/thumbnails/' . $thumb_size . '/' . $cache_filename;
                      $cache_filepath_absolute = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $thumb_size . DIRECTORY_SEPARATOR . $cache_filename;
-                     //$original_image_absolute_path = IMAGE_ROOT . DIRECTORY_SEPARATOR . $original_image_relative_path; // Not needed anymore here
+                     $original_image_absolute_path = IMAGE_ROOT . DIRECTORY_SEPARATOR . $original_image_relative_path; // Need this again
 
-                     // Only check if the cached thumbnail exists (cron job handles creation)
+                     // Check if the cached thumbnail exists
                      if (file_exists($cache_filepath_absolute)) {
                          $thumbnail_relative_path = $cache_filepath_relative; 
                      } else {
-                         // Log if thumbnail is missing, cron should create it later
-                         error_log("[list_dirs] Thumbnail MISSING for '{$dir_name}' -> {$cache_filepath_relative}. Cron should create it.");
-                         // No longer call create_thumbnail here
+                         // Attempt to create thumbnail on-the-fly
+                         error_log("[list_dirs] Thumbnail MISSING for '{$dir_name}'. Attempting on-the-fly creation...");
+                         if (is_readable($original_image_absolute_path)) { 
+                             if (create_thumbnail($original_image_absolute_path, $cache_filepath_absolute, $thumb_size)) {
+                                  $thumbnail_relative_path = $cache_filepath_relative;
+                                  // Log creation success already happens inside create_thumbnail
+                             } else {
+                                  // Log creation failure already happens inside create_thumbnail
+                                  // $thumbnail_relative_path remains null
+                             }
+                         } else {
+                              error_log("[list_dirs] WARNING: Original image not readable, cannot create thumbnail: {$original_image_absolute_path}");
+                              // $thumbnail_relative_path remains null
+                         }
                      }
                  } else {
                      $thumbnail_relative_path = null; 
@@ -401,23 +546,34 @@ switch ($action) {
                     // Logged above if specific error occurred
                 }
                 
-                // --- Thumbnail Generation/Retrieval Logic (Updated: Only Retrieval) ---
+                // --- Thumbnail Generation/Retrieval Logic (Restored: Check + Create) ---
                 $original_relative_path = (empty($safe_relative_path) ? '' : $safe_relative_path . '/') . $image_name;
                 $original_absolute_path = $img_path_absolute; // Already have absolute path
                 $cache_hash = md5($original_relative_path);
-                $cache_filename = $cache_hash . '.jpg'; // Save thumbs as JPG
-                $generated_thumb_path = null; // Initialize
-                $thumb_size = 750; // Desired thumbnail size
+                $cache_filename = $cache_hash . '.jpg'; 
+                $generated_thumb_path = null; 
+                $thumb_size = 750; 
                 $thumbnail_relative_cache_path = 'cache/thumbnails/' . $thumb_size . '/' . $cache_filename;
                 $thumbnail_absolute_cache_path = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $thumb_size . DIRECTORY_SEPARATOR . $cache_filename;
 
-                // Only check if the cached thumbnail exists (cron job handles creation)
+                // Check if the cached thumbnail exists
                 if (file_exists($thumbnail_absolute_cache_path)) {
                     $generated_thumb_path = $thumbnail_relative_cache_path;
                 } else {
-                    // Log if thumbnail is missing, cron should create it later
-                    error_log("[list_sub_items] Thumbnail MISSING for '{$original_relative_path}' -> {$thumbnail_relative_cache_path}. Cron should create it.");
-                    // No longer call create_thumbnail here
+                    // Attempt to create thumbnail on-the-fly
+                    error_log("[list_sub_items] Thumbnail MISSING for '{$original_relative_path}'. Attempting on-the-fly creation...");
+                    if (is_readable($original_absolute_path)) {
+                        if (create_thumbnail($original_absolute_path, $thumbnail_absolute_cache_path, $thumb_size)) {
+                            $generated_thumb_path = $thumbnail_relative_cache_path;
+                            // Log creation success already happens inside create_thumbnail
+                        } else {
+                             // Log creation failure already happens inside create_thumbnail
+                             // $generated_thumb_path remains null
+                        }
+                    } else {
+                        error_log("[list_sub_items] WARNING: Original image not readable, cannot create thumbnail: {$original_absolute_path}");
+                         // $generated_thumb_path remains null
+                    }
                 }
                 // --- End Thumbnail Logic ---
                 
