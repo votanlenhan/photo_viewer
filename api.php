@@ -229,8 +229,10 @@ function sanitize_subdir($subdir) {
  */
 function check_folder_access($folder_source_prefixed_path) {
     global $pdo;
+    error_log("[DEBUG check_folder_access] Checking access for: '{$folder_source_prefixed_path}'"); // ADDED LOG
     // Handle root access (listing sources) - always allowed publicly
     if (empty($folder_source_prefixed_path)) {
+        error_log("[DEBUG check_folder_access] Path is empty (root access). Returning authorized=true."); // ADDED LOG
         return ['authorized' => true];
     }
     try {
@@ -238,16 +240,26 @@ function check_folder_access($folder_source_prefixed_path) {
         $stmt = $pdo->prepare("SELECT password_hash FROM folder_passwords WHERE folder_name = ? LIMIT 1");
         $stmt->execute([$folder_source_prefixed_path]);
         $row = $stmt->fetch();
+        $found_hash = $row ? 'Yes' : 'No'; // ADDED
+        error_log("[DEBUG check_folder_access] Found password hash in DB? {$found_hash}"); // ADDED LOG
 
         if (!$row) {
+            error_log("[DEBUG check_folder_access] No password set. Returning authorized=true."); // ADDED LOG
             return ['authorized' => true]; // No password set for this folder
         }
 
         // Check session using the source-prefixed path as the key
-        if (!empty($_SESSION['authorized_folders'][$folder_source_prefixed_path])) {
+        $session_key = 'authorized_folders';
+        $is_authorized_in_session = !empty($_SESSION[$session_key][$folder_source_prefixed_path]);
+        $session_status_log = $is_authorized_in_session ? 'Yes' : 'No'; // ADDED
+        error_log("[DEBUG check_folder_access] Is authorized in session (\$_SESSION['{$session_key}']['{$folder_source_prefixed_path}'])? {$session_status_log}"); // ADDED LOG
+        
+        if ($is_authorized_in_session) {
+            error_log("[DEBUG check_folder_access] Authorized via session. Returning authorized=true."); // ADDED LOG
             return ['authorized' => true]; // Authorized in session
         }
-
+        
+        error_log("[DEBUG check_folder_access] Password required, not authorized in session. Returning authorized=false, password_required=true."); // ADDED LOG
         return ['authorized' => false, 'password_required' => true]; // Needs password
 
     } catch (PDOException $e) {
@@ -270,8 +282,8 @@ function find_first_image_in_source($source_key, $relative_dir_path, &$allowed_e
     // Access the constant directly
     if (!defined('IMAGE_SOURCES') || !isset(IMAGE_SOURCES[$source_key])) { // Check constant directly
          error_log("[find_first_image_in_source] Invalid source key provided: '{$source_key}'");
-         return null;
-    }
+            return null;
+        }
     $source_config = IMAGE_SOURCES[$source_key];
     $source_base_path = $source_config['path'];
     $resolved_source_base_path = realpath($source_base_path);
@@ -583,166 +595,6 @@ if ($search_term !== null) {
 
 switch ($action) {
 
-    case 'list_sub_items':
-        try {
-            $dir_param = $_GET['dir'] ?? '';
-            
-            $safe_relative_path = sanitize_subdir($dir_param);
-            if ($safe_relative_path === null) {
-                 json_error("Đường dẫn thư mục không hợp lệ.", 400);
-            }
-
-            $full_path = IMAGE_ROOT . (empty($safe_relative_path) ? '' : DIRECTORY_SEPARATOR . $safe_relative_path);
-            if (!is_dir($full_path)) {
-                 json_error("Thư mục không tồn tại.", 404);
-            }
-            
-            $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-            $limit = isset($_GET['limit']) ? max(1, (int)$_GET['limit']) : 50; 
-            $offset = ($page - 1) * $limit;
-
-            // Increment view count only on first page load
-            if ($page === 1 && !empty($safe_relative_path)) {
-                try {
-                    $sql = "INSERT INTO folder_stats (folder_name, views) VALUES (?, 1) 
-                            ON CONFLICT(folder_name) DO UPDATE SET views = views + 1";
-                    $stmt = $pdo->prepare($sql);
-                    $stmt->execute([$safe_relative_path]);
-                } catch (PDOException $e) {
-                    error_log("[list_sub_items] WARNING: Failed to increment view count in DB for '{$safe_relative_path}': " . $e->getMessage());
-                }
-            }
-
-            // Check access
-            if (!empty($safe_relative_path)) {
-                $access = check_folder_access($safe_relative_path);
-                if (!$access['authorized']) {
-                    if (!empty($access['password_required'])) {
-                        json_response(['password_required' => true, 'folder' => $safe_relative_path], 401);
-                    }
-                    $error_msg = isset($access['error']) ? $access['error'] : 'Không được phép truy cập thư mục này.';
-                    json_error($error_msg, 403);
-                }
-            }
-
-            // List items
-            $subfolders_data = [];
-            $all_image_names = []; // Collect all image filenames first
-            $iterator = new DirectoryIterator($full_path);
-
-            foreach ($iterator as $fileinfo) {
-                if ($fileinfo->isDot()) continue;
-                $item_name = $fileinfo->getFilename();
-                $item_relative_path = (empty($safe_relative_path) ? '' : $safe_relative_path . '/') . $item_name;
-
-                if ($fileinfo->isDir()) {
-                    if ($page === 1) { // Only list subfolders on the first page
-                        $thumbnail_path = find_first_image_in_source($item_relative_path, '', $allowed_ext);
-                        $subfolders_data[] = [
-                            'name' => $item_relative_path,
-                            'displayName' => $item_name,
-                            'thumbnail' => $thumbnail_path
-                         ];
-                     }
-                } elseif ($fileinfo->isFile() && in_array(strtolower($fileinfo->getExtension()), $allowed_ext, true)) {
-                     $all_image_names[] = $item_name; // Collect all image names
-                }
-            } // End foreach iterator
-
-            // Sort items
-            if ($page === 1) {
-                 usort($subfolders_data, fn($a, $b) => strcasecmp($a['displayName'], $b['displayName']));
-            }
-            sort($all_image_names, SORT_STRING | SORT_FLAG_CASE);
-            $total_images = count($all_image_names); // Total images based on initial scan
-
-            // --- Removed Image Metadata Caching Logic --- 
-
-            // Paginate image names *using initially scanned list* after sorting
-            $image_names_for_page = array_slice($all_image_names, $offset, $limit);
-
-            // Build the response metadata for the current page, getting image size on-the-fly
-            $images_metadata_for_page = [];
-            foreach ($image_names_for_page as $image_name) {
-                // Get image size directly
-                    $width = 0;
-                    $height = 0;
-                $img_path_absolute = $full_path . DIRECTORY_SEPARATOR . $image_name;
-                $image_size = false;
-                try {
-                     if (is_readable($img_path_absolute)) {
-                    $image_size = @getimagesize($img_path_absolute);
-                     } else {
-                          error_log("[list_sub_items] WARNING: Image not readable, cannot get size: {$img_path_absolute}");
-                     }
-                } catch (Exception $e) {
-                     error_log("[list_sub_items] Exception getting image size for {$img_path_absolute}: " . $e->getMessage());
-                }
-                    if ($image_size !== false) {
-                        $width = $image_size[0];
-                        $height = $image_size[1];
-                    } else {
-                    // Logged above if specific error occurred
-                }
-                
-                // --- Thumbnail Generation/Retrieval Logic (Restored: Check + Create) ---
-                $original_relative_path = (empty($safe_relative_path) ? '' : $safe_relative_path . '/') . $image_name;
-                $original_absolute_path = $img_path_absolute; // Already have absolute path
-                $cache_hash = md5($original_relative_path);
-                $cache_filename = $cache_hash . '.jpg'; 
-                $generated_thumb_path = null; 
-                $thumb_size = 750; 
-                $thumbnail_relative_cache_path = 'cache/thumbnails/' . $thumb_size . '/' . $cache_filename;
-                $thumbnail_absolute_cache_path = __DIR__ . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'thumbnails' . DIRECTORY_SEPARATOR . $thumb_size . DIRECTORY_SEPARATOR . $cache_filename;
-
-                // Check if the cached thumbnail exists
-                    if (file_exists($thumbnail_absolute_cache_path)) {
-                        $generated_thumb_path = $thumbnail_relative_cache_path;
-                    } else {
-                    // Attempt to create thumbnail on-the-fly
-                    error_log("[list_sub_items] Thumbnail MISSING for '{$original_relative_path}'. Attempting on-the-fly creation...");
-                        if (is_readable($original_absolute_path)) {
-                            if (create_thumbnail($original_absolute_path, $thumbnail_absolute_cache_path, $thumb_size)) {
-                                $generated_thumb_path = $thumbnail_relative_cache_path;
-                            // Log creation success already happens inside create_thumbnail
-                            } else {
-                             // Log creation failure already happens inside create_thumbnail
-                             // $generated_thumb_path remains null
-                            }
-                        } else {
-                             error_log("[list_sub_items] WARNING: Original image not readable, cannot create thumbnail: {$original_absolute_path}");
-                         // $generated_thumb_path remains null
-                        }
-                }
-                // --- End Thumbnail Logic ---
-                
-                $images_metadata_for_page[] = [
-                    'name' => $image_name,
-                    'width' => $width, // Width obtained directly
-                    'height' => $height, // Height obtained directly
-                    'thumb_path' => $generated_thumb_path
-                ];
-            }
-            
-            // Build final response
-            $response_data = [
-                 'images' => $images_metadata_for_page, 
-                 'totalImages' => $total_images,
-                 'currentPage' => $page,
-                 'limit' => $limit
-            ];
-            if ($page === 1) {
-                $response_data['subfolders'] = $subfolders_data;
-            }
-
-            json_response($response_data);
-
-        } catch (Throwable $e) {
-            error_log("[list_sub_items] FATAL ERROR: " . $e->getMessage() . "\nStack Trace:\n" . $e->getTraceAsString());
-            json_error("Không thể đọc nội dung thư mục. Lỗi: " . $e->getMessage(), 500); 
-        }
-        break;
-
     case 'download_zip':
         // NOTE: This action outputs a file directly, NOT JSON.
         // It needs to handle output buffering carefully.
@@ -878,7 +730,7 @@ switch ($action) {
                  @unlink($temp_zip_file); // Clean up empty/missing temp file
                  error_log("[download_zip] No files added or temp file missing. Added: {$files_added_count}, Exists: " . file_exists($temp_zip_file));
                  // Throw error to be caught and sent as plain text
-                 throw new Exception("Không có file nào hợp lệ trong thư mục để nén.", 404); 
+                 throw new Exception("Không có file nào hợp lệ trong thư mục để nén.", 404);
              }
 
         } catch (Throwable $e) {
@@ -900,43 +752,6 @@ switch ($action) {
              die("Lỗi Server khi tạo file ZIP: " . htmlspecialchars($error_message)); 
         }
         break; // End case 'download_zip'
-
-    case 'verify_password':
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-             json_error("Phương thức không hợp lệ.", 405);
-        }
-
-        $folder_param = $_POST['folder'] ?? null;
-        $password_attempt = $_POST['password'] ?? null;
-
-        $safe_relative_path = sanitize_subdir($folder_param);
-
-        if ($safe_relative_path === null || $password_attempt === null || $password_attempt === '') { // Also check password presence
-            json_error("Thiếu thông tin thư mục hoặc mật khẩu.", 400);
-        }
-
-        try {
-            $stmt = $pdo->prepare("SELECT password_hash FROM folder_passwords WHERE folder_name = ? LIMIT 1");
-            $stmt->execute([$safe_relative_path]);
-            $row = $stmt->fetch();
-
-            if ($row) {
-                $correct_hash = $row['password_hash'];
-                 if (password_verify($password_attempt, $correct_hash)) {
-                    $_SESSION['authorized_folders'][$safe_relative_path] = true;
-                    json_response(['authorized' => true]);
-                 } else {
-                    json_response(['authorized' => false, 'error' => 'Mật khẩu không đúng.'], 401);
-                 }
-            } else {
-                error_log("[verify_password] No password hash found in DB for '{$safe_relative_path}', but verification was attempted?");
-                json_response(['authorized' => false, 'error' => 'Thư mục này không yêu cầu mật khẩu (lỗi logic?).'], 400); 
-            }
-        } catch (Throwable $e) {
-            error_log("[verify_password] FATAL ERROR for '{$safe_relative_path}': " . $e->getMessage() . "\nStack Trace:\n" . $e->getTraceAsString());
-            json_error("Lỗi server khi xác thực mật khẩu. " . $e->getMessage(), 500);
-        }
-        break;
 
     case 'admin_list_folders':
         if (empty($_SESSION['admin_logged_in'])) {
@@ -988,7 +803,7 @@ switch ($action) {
                 try {
                     // Iterate using the resolved path (which MUST be a string here)
                     $iterator = new DirectoryIterator($resolved_source_base_path);
-                    foreach ($iterator as $fileinfo) {
+            foreach ($iterator as $fileinfo) {
                         if ($fileinfo->isDot() || !$fileinfo->isDir()) {
                             continue;
                         }
@@ -997,21 +812,21 @@ switch ($action) {
                         $source_prefixed_path = $source_key . '/' . $dir_name; // e.g., "main/Album 1"
 
                         // Apply search filter if provided
-                        if ($admin_search_term !== null && mb_stripos($dir_name, $admin_search_term, 0, 'UTF-8') === false) {
-                            continue; 
-                        }
+                    if ($admin_search_term !== null && mb_stripos($dir_name, $admin_search_term, 0, 'UTF-8') === false) {
+                        continue; 
+                    }
                         
                         // Get stats using the source-prefixed path
                         $stats = $folder_stats[$source_prefixed_path] ?? ['views' => 0, 'downloads' => 0];
                         
-                        $folders_data[] = [
+                    $folders_data[] = [
                             'name' => $dir_name, // Display name
                             'path' => $source_prefixed_path, // Identifier (source-prefixed)
                             'source' => $source_key,
                             'protected' => isset($protected_status[$source_prefixed_path]),
-                            'views' => $stats['views'],
-                            'downloads' => $stats['downloads']
-                        ];
+                        'views' => $stats['views'],
+                        'downloads' => $stats['downloads']
+                    ];
                     }
                 } catch (Exception $e) {
                      error_log("[admin_list_folders] Error scanning source '{$source_key}': " . $e->getMessage());
@@ -1266,14 +1081,20 @@ switch ($action) {
         $current_source_prefixed_path = $path_info['source_prefixed_path']; // e.g., main/album
 
         // Check access for the specific directory
+        error_log("[DEBUG list_files] Calling check_folder_access for: {$current_source_prefixed_path}"); // ADDED LOG
         $access = check_folder_access($current_source_prefixed_path);
+        error_log("[DEBUG list_files] Access result for {$current_source_prefixed_path}: " . json_encode($access)); // ADDED LOG
+        
         if (!$access['authorized']) {
             if (!empty($access['password_required'])) {
+                error_log("[DEBUG list_files] Access DENIED (password required) for {$current_source_prefixed_path}. Sending 401."); // ADDED LOG
                 json_error('Yêu cầu mật khẩu.', 401); // Unauthorized, password needed
             } else {
+                error_log("[DEBUG list_files] Access DENIED (forbidden) for {$current_source_prefixed_path}. Sending 403. Reason: " . ($access['error'] ?? 'N/A')); // ADDED LOG
                 json_error($access['error'] ?? 'Không có quyền truy cập.', 403); // Forbidden
             }
         }
+        error_log("[DEBUG list_files] Access GRANTED for {$current_source_prefixed_path}. Proceeding to list items."); // ADDED LOG
 
         // Build Breadcrumb using the source-prefixed path
         $breadcrumb = [];

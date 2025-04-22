@@ -104,18 +104,19 @@ function debounce(func, wait) {
       ok.textContent = 'Đang xác thực...';
   
       const form = new FormData();
-      form.append('action','verify_password');
+      form.append('action','authenticate');
       form.append('folder', folderName);
       form.append('password', pass);
       const result = await fetchData('api.php', { method:'POST', body: form });
   
       ok.disabled = cancel.disabled = false;
       ok.textContent = 'Xác nhận';
-                         if (result.status === 'success' && result.data.authorized) {
-                             hidePasswordPrompt();
-        loadSubItems(folderName); // Reload content after success
-                         } else {
-        errEl.textContent = result.data?.error || result.message || 'Sai mật khẩu.';
+            if (result.status === 'success' && result.data.success === true) {
+                hidePasswordPrompt();
+                 loadSubItems(folderName); // Reload content after success
+            } else {
+                 // Error message might come from result.error (in case of 401) or result.message (general fetch error)
+                 errEl.textContent = result.data?.error || result.message || 'Mật khẩu không đúng hoặc có lỗi xảy ra.';
         input.select(); input.focus();
       }
     };
@@ -198,9 +199,18 @@ function debounce(func, wait) {
     
         const span = document.createElement('span');
         span.textContent = dir.name; // Use dir.name for display text
+        // ADD LOCK ICON if password required
+        if (dir.password_required) {
+            span.innerHTML += ' <span class="lock-icon" title="Yêu cầu mật khẩu">🔒</span>';
+        }
     
             a.append(img, span);
-        a.onclick = e => { e.preventDefault(); navigateToFolder(dir.path); }; // Use dir.path for navigation
+        // MODIFY onClick based on password requirement
+        if (dir.password_required) {
+            a.onclick = e => { e.preventDefault(); showPasswordPrompt(dir.path); };
+        } else {
+             a.onclick = e => { e.preventDefault(); navigateToFolder(dir.path); }; // Use dir.path for navigation
+        }
             li.appendChild(a);
         listEl.appendChild(li);
     });
@@ -364,9 +374,18 @@ function debounce(func, wait) {
 
             const span = document.createElement('span');
             span.textContent = sf.name; // Use sf.name for display text
+             // ADD LOCK ICON if password required
+             if (sf.password_required) {
+                 span.innerHTML += ' <span class="lock-icon" title="Yêu cầu mật khẩu">🔒</span>';
+             }
 
                 a.append(img, span);
-            a.onclick = e => { e.preventDefault(); navigateToFolder(sf.path); }; // Use sf.path for navigation
+             // MODIFY onClick based on password requirement
+             if (sf.password_required) {
+                 a.onclick = e => { e.preventDefault(); showPasswordPrompt(sf.path); };
+             } else {
+                  a.onclick = e => { e.preventDefault(); navigateToFolder(sf.path); }; // Use sf.path for navigation
+             }
                 li.appendChild(a);
                 ul.appendChild(li);
             });
