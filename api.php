@@ -1113,6 +1113,21 @@ switch ($action) {
         }
         error_log("[DEBUG list_files] Access GRANTED for {$current_source_prefixed_path}. Proceeding to list items."); // ADDED LOG
 
+        // --- Increment View Count (Only on first page load) ---
+        if ($page === 1) {
+            try {
+                $sql = "INSERT INTO folder_stats (folder_name, views) VALUES (?, 1) 
+                        ON CONFLICT(folder_name) DO UPDATE SET views = views + 1";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$current_source_prefixed_path]);
+                error_log("[DEBUG list_files] Incremented view count for '{$current_source_prefixed_path}'"); // ADDED LOG
+            } catch (PDOException $e) {
+                error_log("[list_files] WARNING: Failed to increment view count in DB for '{$current_source_prefixed_path}': " . $e->getMessage());
+                // Continue even if stats update fails
+            }
+        }
+        // ------------------------------------------------------
+
         // Build Breadcrumb using the source-prefixed path
         $breadcrumb = [];
         if ($current_source_prefixed_path) {
