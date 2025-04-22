@@ -9,10 +9,17 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0); // Don't display errors to stdout (they'll go to php-error.log if configured)
 ini_set('log_errors', 1);
 
-// --- Configuration ---
-$logDirectory = __DIR__ . '/logs'; // Use absolute path based on this script's location
-$maxAgeDays = 30;                // Delete files older than this many days
-$maxSizeBytes = 50 * 1024 * 1024; // 50 MB - Rotate active .log files larger than this
+// --- Configuration (Load from central config) ---
+$config = require_once __DIR__ . '/config.php';
+if (!$config) {
+    echo "ERROR: Failed to load config.php in cron_log_cleaner.php\n";
+    error_log("CRITICAL CONFIG ERROR: Failed to load config.php in cron_log_cleaner.php");
+    exit(1);
+}
+
+$logDirectory = __DIR__ . '/logs'; // Keep log directory relative to script for now
+$maxAgeDays = $config['log_max_age_days'] ?? 30; // Use config value or default
+$maxSizeBytes = $config['log_max_size_bytes'] ?? (50 * 1024 * 1024); // Use config value or default (50MB)
 $logFilePattern = '*.log';        // Pattern for active log files
 $rotatedFilePattern = '*.log.*';   // Pattern for rotated log files (e.g., file.log.20231027_103000)
 // ---------------------

@@ -1,9 +1,17 @@
 <?php
 // --- Database Connection Configuration ---
 
-// SECURITY: Store credentials outside the web root if possible (e.g., using environment variables or config files).
-$db_type = 'sqlite'; // Database type (e.g., sqlite, mysql)
-$db_path = __DIR__ . '/database.sqlite'; // Path for SQLite file
+// Load central configuration
+$config = require_once __DIR__ . '/config.php';
+
+if (!$config) {
+    error_log("CRITICAL CONFIG ERROR: Failed to load config.php");
+    die("Server Configuration Error: Could not load configuration file.");
+}
+
+// Use settings from config
+$db_type = 'sqlite'; // Assuming SQLite for now, could be moved to config if needed
+$db_path = $config['db_path'] ?? (__DIR__ . '/database.sqlite'); // Fallback just in case
 
 // --- MySQL settings (EXAMPLE ONLY - NOT USED WHEN $db_type is 'sqlite') ---
 /*
@@ -13,87 +21,76 @@ $db_user = 'root'; // SECURITY: Use a dedicated, less privileged user.
 $db_pass = ''; // SECURITY: Use a strong password and avoid hardcoding.
 */
 
-// --- Image Source Configuration ---
-// IMPORTANT: Replace the path for 'extra_drive' with the actual absolute path
-//            to your additional image directory on the other drive.
-//            Ensure the web server process has read access to this directory.
-// Use unique keys for each source (e.g., 'main', 'extra_drive').
-// These keys will be used internally to identify the source.
-define('IMAGE_SOURCES', [
-    'main' => [
-        'path' => realpath(__DIR__ . '/images'), // Primary source inside the project
-        // 'name' => 'Thư mục chính' // Optional display name
-    ],
-    'extra_drive' => [
-        'path' => 'G:\\2020',
-        // 'name' => 'Ổ G 2020'
-    ],
-    'guu_ssd' => [
-        'path' => 'D:\\2020',
-        // 'name' => 'SSD Guu 2020'
-    ]
-    // Add more sources here if needed, e.g.:
-    // 'network_share' => ['path' => '/mnt/shared_photos', 'name' => 'Network Share']
-]);
-
-// Validate IMAGE_SOURCES paths
-/* Commenting out strict validation here. Validation will be done by consumer scripts (API, Cron).
-foreach (IMAGE_SOURCES as $key => $path) {
-    // Convert potential relative paths (like from __DIR__) to absolute paths
-    $resolved_path = realpath($path);
-
-    if ($resolved_path === false || !is_dir($resolved_path) || !is_readable($resolved_path)) {
-        // Log a fatal error and stop execution if any source is invalid
-        $error_msg = "CRITICAL CONFIG ERROR: Image source '{$key}' is invalid or not readable: '{$path}' (Resolved: '" . ($resolved_path ?: 'false') . "'). Check path and permissions.";
-        error_log($error_msg);
-        // Display a user-friendly error if possible (might fail if headers already sent)
-        if (!headers_sent()) {
-             header('Content-Type: text/plain; charset=utf-8', true, 500);
+// --- Image Source Configuration (Get from config) ---
+// Validate IMAGE_SOURCES paths from config
+$valid_image_sources = [];
+if (isset($config['image_sources']) && is_array($config['image_sources'])) {
+    foreach ($config['image_sources'] as $key => $source_config) {
+        if (isset($source_config['path'])) {
+            // Resolve path relative to config file location if needed, or use absolute path
+            $resolved_path = realpath($source_config['path']); 
+            if ($resolved_path && is_dir($resolved_path) && is_readable($resolved_path)) {
+                // Use the resolved path for the source configuration
+                $valid_image_sources[$key] = [
+                    'path' => $resolved_path,
+                    'name' => $source_config['name'] ?? $key // Use name from config or key as fallback
+                ];
+            } else {
+                error_log("CONFIG WARNING: Image source '{$key}' path '{$source_config['path']}' is invalid or not readable. Skipping.");
+            }
+        } else {
+             error_log("CONFIG WARNING: Image source '{$key}' is missing 'path'. Skipping.");
         }
-        // die() prevents scripts like api.php from handling the missing source gracefully.
-         die("Server Configuration Error: One or more image sources are invalid. Please check server logs.");
     }
-    // Optional: Update the array with the resolved path?
-    // define('IMAGE_SOURCES', array_merge(IMAGE_SOURCES, [$key => $resolved_path])); // This won't work with define
-    // Better to let consumer scripts resolve paths if needed, or ensure paths in define() are absolute.
+} else {
+     error_log("CRITICAL CONFIG ERROR: 'image_sources' is not defined or not an array in config.php");
+     // Potentially die here if sources are absolutely required
+     // die("Server Configuration Error: Image sources configuration missing or invalid.");
 }
-*/
 
-// --- Cache and Thumbnail Configuration ---
-define('ALLOWED_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']);
-define('THUMBNAIL_SIZES', [150, 750]); // Available thumbnail sizes
+// Define the constant with VALIDATED sources only
+define('IMAGE_SOURCES', $valid_image_sources);
+
+// --- Cache and Thumbnail Configuration (Get from config) ---
+$allowed_extensions = $config['allowed_extensions'] ?? ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+$thumbnail_sizes = $config['thumbnail_sizes'] ?? [150, 750];
+
+// Define constants for use in API etc.
+define('ALLOWED_EXTENSIONS', $allowed_extensions);
+define('THUMBNAIL_SIZES', $thumbnail_sizes);
 
 try {
-    $cache_thumb_root_path = realpath(__DIR__ . '/cache/thumbnails');
-    if (!$cache_thumb_root_path) {
-        // Attempt to create cache/thumbnails directory if it doesn't exist
-        $cacheBase = __DIR__ . '/cache';
-        $thumbDir = $cacheBase . '/thumbnails';
+    // Resolve path relative to config file location
+    $cache_thumb_root_path = $config['cache_thumb_root'] ?? (__DIR__ . '/cache/thumbnails');
+    $resolved_cache_path = realpath($cache_thumb_root_path);
+
+    if (!$resolved_cache_path) {
+        // Attempt to create cache directories if realpath failed
+        $cacheBase = dirname($cache_thumb_root_path);
+        $thumbDir = $cache_thumb_root_path;
         error_log("Attempting to create cache directories: Base='{$cacheBase}', Thumb='{$thumbDir}'");
-        if (!is_dir($cacheBase)) @mkdir($cacheBase, 0775);
-        if (!is_dir($thumbDir)) @mkdir($thumbDir, 0775);
-        // Try realpath again
-        $cache_thumb_root_path = realpath($thumbDir);
+        if (!is_dir($cacheBase)) @mkdir($cacheBase, 0775, true);
+        if (!is_dir($thumbDir)) @mkdir($thumbDir, 0775, true);
+        clearstatcache(); // Clear cache after creating directory
+        $resolved_cache_path = realpath($thumbDir);
     }
-    
-    if (!$cache_thumb_root_path || !is_dir($cache_thumb_root_path) || !is_writable($cache_thumb_root_path)) {
-        throw new Exception("Failed to resolve, create, or write to CACHE_THUMB_ROOT path: '" . (__DIR__ . '/cache/thumbnails') . "'. Check permissions.");
+
+    if (!$resolved_cache_path || !is_dir($resolved_cache_path) || !is_writable($resolved_cache_path)) {
+        throw new Exception("Failed to resolve, create, or write to CACHE_THUMB_ROOT path: '" . htmlspecialchars($cache_thumb_root_path) . "'. Check permissions and path in config.php. Resolved to: " . ($resolved_cache_path ?: 'false'));
     }
-    define('CACHE_THUMB_ROOT', $cache_thumb_root_path);
-    
+    define('CACHE_THUMB_ROOT', $resolved_cache_path);
+
     // Pre-create size directories if they don't exist
-    foreach (THUMBNAIL_SIZES as $size) {
+    foreach ($thumbnail_sizes as $size) {
         $size_dir = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $size;
         if (!is_dir($size_dir)) {
-            if (!@mkdir($size_dir, 0775)) {
+            if (!@mkdir($size_dir, 0775, true)) { // Added recursive flag
                 error_log("Warning: Failed to automatically create thumbnail size directory: {$size_dir}");
-                // Don't make it fatal, but log it.
             }
         }
     }
 
 } catch (Throwable $e) {
-    // Log the detailed error and stop execution
     $error_msg = "CRITICAL CONFIG ERROR: Failed to configure cache paths - " . $e->getMessage();
     error_log($error_msg);
     if (!headers_sent()) {
@@ -124,7 +121,7 @@ try {
         $dsn = "mysql:host={$db_host};dbname={$db_name};charset=utf8mb4";
         $pdo = new PDO($dsn, $db_user, $db_pass, $options);
     } else {
-        throw new Exception("Unsupported database type: {$db_type}");
+        throw new Exception("Unsupported database type configured: {$db_type}");
     }
 
     // Connection successful (optional: log success)
@@ -132,16 +129,13 @@ try {
 
 } catch (PDOException $e) {
     // Log the detailed error but show a generic message to the user/API.
-    error_log("Database Connection Error: " . $e->getMessage());
-    // If this script is included by api.php, it should handle sending the JSON error.
-    // Avoid echoing direct errors here.
-    // For standalone use or direct access, you might want to die() or output an error page.
-     if (basename($_SERVER['PHP_SELF']) == basename(__FILE__)) {
+    error_log("Database Connection Error: " . $e->getMessage() . " (DSN: {$dsn})"); // Log DSN
+    if (basename($_SERVER['PHP_SELF']) == basename(__FILE__)) {
          http_response_code(500);
          die("Database connection error. Please check server logs.");
-     }
-     // If included, let the including script handle the error (e.g., api.php will send JSON error)
-     // We might set a global flag or re-throw exception if needed by caller.
+    }
+    // If included, let the including script handle the error (e.g., api.php will send JSON error)
+    // We might set a global flag or re-throw exception if needed by caller.
 
 } catch (Exception $e) {
     error_log("Configuration Error: " . $e->getMessage());

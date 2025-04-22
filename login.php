@@ -1,15 +1,20 @@
 <?php
 session_start(); // Luôn bắt đầu session ở đầu file cần dùng session
 
-// --- CẤU HÌNH ADMIN ---
-define('ADMIN_USERNAME', 'admin'); // Đặt tên đăng nhập admin mong muốn
+// Load central configuration
+$config = require_once __DIR__ . '/config.php';
+if (!$config) {
+    error_log("CRITICAL CONFIG ERROR: Failed to load config.php in login.php");
+    // Show generic error, dont reveal config issues
+    $error_message = 'Lỗi cấu hình server.'; 
+} else {
+    $admin_username = $config['admin_username'] ?? 'admin'; // Use from config, fallback
+    $admin_password_hash = $config['admin_password_hash'] ?? null;
+}
 
-// !!! SECURITY WARNING !!!
-// DO NOT COMMIT YOUR REAL PASSWORD HASH TO A PUBLIC REPOSITORY.
-// Ideally, move these credentials to environment variables or a config file outside the web root (and add to .gitignore).
-// Make sure to change the password immediately after deploying to a new server.
-// The hash below is a placeholder for the password "password".
-define('ADMIN_PASSWORD_HASH', '$2y$10$.lWLpmOjLY6pun9c62z9iOo9/in5RA/UQKTMd513rR2QhlB34Vvu2'); // <<<--- GENERATE AND REPLACE WITH YOUR OWN SECURE HASH !!!
+// --- CẤU HÌNH ADMIN (REMOVED - Loaded from config.php) ---
+// define('ADMIN_USERNAME', 'admin'); 
+// define('ADMIN_PASSWORD_HASH', '...'); 
 
 $error_message = '';
 
@@ -21,21 +26,25 @@ if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true
 
 // Xử lý khi người dùng gửi form đăng nhập
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username_attempt = isset($_POST['username']) ? trim($_POST['username']) : '';
-    $password_attempt = isset($_POST['password']) ? $_POST['password'] : '';
-
-    // Kiểm tra thông tin đăng nhập
-    if ($username_attempt === ADMIN_USERNAME && password_verify($password_attempt, ADMIN_PASSWORD_HASH)) {
-        // Đăng nhập thành công
-        // Tái tạo session ID để tăng bảo mật (ngăn chặn session fixation)
-        session_regenerate_id(true);
-        $_SESSION['admin_logged_in'] = true; // Lưu trạng thái đăng nhập vào session
-        $_SESSION['admin_username'] = $username_attempt; // Lưu tên đăng nhập
-        header('Location: admin.php'); // Chuyển hướng đến trang admin
-        exit;
+    // Check if config loaded correctly before proceeding
+    if (empty($admin_password_hash)) {
+        $error_message = 'Lỗi cấu hình server nghiêm trọng.';
     } else {
-        // Đăng nhập thất bại
-        $error_message = 'Tên đăng nhập hoặc mật khẩu không đúng.';
+        $username_attempt = isset($_POST['username']) ? trim($_POST['username']) : '';
+        $password_attempt = isset($_POST['password']) ? $_POST['password'] : '';
+
+        // Kiểm tra thông tin đăng nhập using config values
+        if ($username_attempt === $admin_username && password_verify($password_attempt, $admin_password_hash)) {
+            // Đăng nhập thành công
+            session_regenerate_id(true);
+            $_SESSION['admin_logged_in'] = true;
+            $_SESSION['admin_username'] = $username_attempt;
+            header('Location: admin.php');
+            exit;
+        } else {
+            // Đăng nhập thất bại
+            $error_message = 'Tên đăng nhập hoặc mật khẩu không đúng.';
+        }
     }
 }
 ?>
