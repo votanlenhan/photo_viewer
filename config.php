@@ -31,7 +31,7 @@ return [
     // --- API Settings ---
     'pagination_limit' => 100, // Default limit for list_files pagination (API currently uses 100, JS uses 50)
     'zip_max_execution_time' => 300, // Max execution time for zip creation (seconds)
-    'zip_memory_limit' => '1024M',   // Memory limit for zip creation
+    'zip_memory_limit' => '4096M',   // Memory limit for zip creation
 
     // --- Cron/Log Settings ---
     'log_max_age_days' => 30,

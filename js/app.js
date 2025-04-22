@@ -792,44 +792,83 @@ function debounce(func, wait) {
     // Start the app
     initializeApp(); // Call initialization first
 
-    // --- ADDED: Event Listener Setup for ZIP (moved here) ---
+    // --- MODIFIED: Event Listener Setup for Header Actions (Share/Download/More) ---
     const imageView = document.getElementById('image-view');
-    const overlay = document.getElementById('zip-progress-overlay');
-    const cancelButton = document.getElementById('cancel-zip-button');
+    const moreActionsButton = document.getElementById('more-actions-button');
+    const moreActionsMenu = document.getElementById('more-actions-menu');
+    const shareActionMenuButton = document.getElementById('shareActionMenu');
+    const downloadActionMenuButton = document.getElementById('downloadActionMenu');
+    // Zip overlay and cancel button (already declared in previous step, ensure they are accessible here)
+    const overlay = document.getElementById('zip-progress-overlay'); 
+    const cancelButton = document.getElementById('cancel-zip-button'); 
 
+    // Function to get current folder info (used by multiple handlers)
+    function getCurrentFolderInfo() {
+        const path = currentFolder; // Assume global 'currentFolder' holds the path
+        const nameElement = document.getElementById('current-directory-name');
+        const name = nameElement ? nameElement.textContent.replace('Album: ', '').trim() : path.split('/').pop(); // Get name from header or path
+        return { path, name };
+    }
+
+    // Delegated listener for original desktop buttons
     if (imageView) {
-        // Use event delegation on the container
         imageView.addEventListener('click', (event) => {
-            // Check if the clicked element is the download link
-            if (event.target && event.target.id === 'download-all-link') {
-                event.preventDefault(); // Prevent default link behavior
+            const target = event.target;
+            const folderInfo = getCurrentFolderInfo();
 
-                // We need the current folder path. Assume 'currentFolder' state variable holds it.
-                const folderPath = currentFolder;
-                // Try to get a more readable folder name from the header if possible
-                const folderNameElement = document.getElementById('current-directory-name');
-                const folderName = folderNameElement ? folderNameElement.textContent : folderPath;
-
-                if (!folderPath) {
-                    alert('Lỗi: Không thể xác định thư mục hiện tại để tải về.');
-                    return;
-                }
-
-                showZipFeedback(folderName);
-
-                // Schedule the actual download start after a short delay
-                clearTimeout(zipDownloadTimerId); // Clear previous timer
-                zipDownloadTimerId = setTimeout(() => {
-                    console.log("Starting ZIP download for:", folderPath);
-                    window.location.href = getZipDownloadUrl(folderPath);
-                    // Feedback stays visible until cancelled or timeout
-                }, 150); // 150ms delay
+            if (target && target.id === 'shareButton') {
+                event.preventDefault();
+                handleShareAction(folderInfo.path);
+            }
+             // Note: Download link is an <a> tag, not a button
+            else if (target && target.id === 'download-all-link') {
+                event.preventDefault(); 
+                handleDownloadZipAction(folderInfo.path, folderInfo.name);
             }
         });
     } else {
-        console.error("Image view container not found for attaching download listener.");
+        console.error("Image view container not found for attaching action listeners.");
     }
 
+    // Listener for "More" button (mobile)
+    if (moreActionsButton) {
+        moreActionsButton.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent click from immediately closing menu via document listener
+            if (moreActionsMenu) {
+                moreActionsMenu.classList.toggle('menu-visible');
+            }
+        });
+    } else {
+        console.error("More actions button not found.");
+    }
+
+    // Listeners for menu items (mobile)
+    if (shareActionMenuButton) {
+        shareActionMenuButton.addEventListener('click', () => {
+             const folderInfo = getCurrentFolderInfo();
+             handleShareAction(folderInfo.path);
+             // handleShareAction already hides menu
+        });
+    }
+    if (downloadActionMenuButton) {
+         downloadActionMenuButton.addEventListener('click', () => {
+             const folderInfo = getCurrentFolderInfo();
+             handleDownloadZipAction(folderInfo.path, folderInfo.name);
+              // handleDownloadZipAction already hides menu
+         });
+    }
+
+    // Listener to close menu when clicking outside
+    document.addEventListener('click', (event) => {
+        if (moreActionsMenu && moreActionsMenu.classList.contains('menu-visible')) {
+            // Check if the click was outside the menu AND outside the button that opens it
+            if (!moreActionsMenu.contains(event.target) && !moreActionsButton.contains(event.target)) {
+                moreActionsMenu.classList.remove('menu-visible');
+            }
+        }
+    });
+
+    // --- Existing Zip Cancel Listeners (Keep them) ---
     if (cancelButton) {
         cancelButton.addEventListener('click', () => {
             console.log("ZIP download preparation cancelled by user.");
@@ -838,17 +877,21 @@ function debounce(func, wait) {
     } else {
          console.error("Cancel ZIP button not found.");
     }
-
     if (overlay) {
         document.addEventListener('keydown', (e) => {
-            // Check if overlay is visible and Escape key is pressed
             if (overlay.style.display !== 'none' && e.key === 'Escape') {
                 console.log("ZIP download preparation cancelled via Escape key.");
                 hideZipFeedback();
+                 // Also hide the actions menu if Escape is pressed while zip overlay is shown
+                 if (moreActionsMenu) moreActionsMenu.classList.remove('menu-visible');
+            }
+            // Also close actions menu on Escape even if zip overlay isn't shown
+            else if (moreActionsMenu && moreActionsMenu.classList.contains('menu-visible') && e.key === 'Escape'){
+                 moreActionsMenu.classList.remove('menu-visible');
             }
         });
     }
-    // --- End ADDED Event Listener Setup ---
+    // --- End Listener Setup ---
 
 }); // End DOMContentLoaded
 
@@ -889,5 +932,58 @@ function hideZipFeedback() {
     // Optional: Re-enable the download button if you disabled it
     // const downloadButton = document.getElementById('download-all-link');
     // if (downloadButton) downloadButton.disabled = false;
+}
+
+// =======================================
+// === ACTION HANDLER FUNCTIONS        ===
+// =======================================
+
+function handleShareAction(folderPath) {
+    if (!folderPath) return;
+    const shareUrl = `${location.origin}${location.pathname}#?folder=${encodeURIComponent(folderPath)}`;
+    const shareButton = document.getElementById('shareButton') || document.getElementById('shareActionMenu'); // Get either button
+    
+    navigator.clipboard.writeText(shareUrl).then(() => {
+        if (shareButton) {
+            const originalText = shareButton.dataset.originalText || 'Sao chép Link'; // Store original text if not already
+            if (!shareButton.dataset.originalText) shareButton.dataset.originalText = originalText;
+            shareButton.textContent = 'Đã sao chép!';
+            shareButton.disabled = true;
+            setTimeout(() => {
+                shareButton.textContent = originalText;
+                shareButton.disabled = false;
+            }, 2000);
+        } else {
+            alert('Đã sao chép link!'); // Fallback alert
+        }
+    }).catch(err => {
+        console.error('Không thể sao chép link:', err);
+        alert('Lỗi: Không thể tự động sao chép link.');
+    });
+
+    // Hide menu if open
+    const menu = document.getElementById('more-actions-menu');
+    if (menu) menu.classList.remove('menu-visible');
+}
+
+function handleDownloadZipAction(folderPath, folderName) {
+    if (!folderPath) {
+        alert('Lỗi: Không thể xác định thư mục hiện tại để tải về.');
+        return;
+    }
+
+    showZipFeedback(folderName);
+
+    // Schedule the actual download start after a short delay
+    clearTimeout(zipDownloadTimerId); // Clear previous timer
+    zipDownloadTimerId = setTimeout(() => {
+        console.log("Starting ZIP download for:", folderPath);
+        window.location.href = getZipDownloadUrl(folderPath);
+        // Feedback stays visible until cancelled or timeout
+    }, 150); // 150ms delay
+
+    // Hide menu if open
+    const menu = document.getElementById('more-actions-menu');
+    if (menu) menu.classList.remove('menu-visible');
 }
   

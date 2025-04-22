@@ -51,8 +51,11 @@
             <div class="image-view-header">
                 <h2 id="current-directory-name"></h2>
                  <div class="image-view-actions">
+                    <!-- Keep original buttons, remove mobile specific classes/elements -->
                     <button id="shareButton" class="button share-button">Sao chép Link</button>
                     <a id="download-all-link" href="#" class="button download-all">Tải tất cả (ZIP)</a>
+                    
+                    <!-- REMOVED "More" button and menu -->
                  </div>
             </div>
             <div id="image-grid"></div>

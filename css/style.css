@@ -80,6 +80,11 @@ button:disabled, .button:disabled {
     color: #fff; 
 }
 
+/* Push download button to the right */
+#download-all-link {
+    margin-left: auto;
+}
+
 /* Các nút hành động khác (như Sao chép link) nên sử dụng class "button" ở trên */
 /* Ví dụ: <button class="button" id="copy-link-button">Sao chép link</button> */
 /* Không cần thêm CSS riêng nếu dùng class "button". */
@@ -609,7 +614,7 @@ main.container {
         gap: 15px;
     }
      .directory-list-styling li a {
-        padding: 12px;
+        padding: 14px 16px; /* Increased padding for better tap target */
         gap: 12px;
     }
     .folder-thumbnail {
@@ -643,6 +648,14 @@ main.container {
      }
      .directory-list-styling {
         gap: 8px; /* Reduce gap */
+    }
+    /* Increase size/spacing for Load More button */
+    #load-more-container {
+        margin-top: 30px; /* Increased top margin */
+    }
+    #loadMoreBtn {
+        padding: 12px 24px; /* Increased padding */
+        font-size: 1em;    /* Ensure font size is adequate */
     }
 }
 
@@ -1012,4 +1025,71 @@ main.container {
 /* Optional: Hover effect */
 .pswp__button--download-button:hover svg {
     fill: #DDD; /* Lighter gray on hover */
+}
+
+/* --- Image View Header Actions --- */
+.image-view-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative; /* Needed for absolute positioning of the dropdown menu */
+}
+
+/* --- Dropdown Menu for Mobile Actions --- */
+.more-actions-menu {
+    display: none; /* Hidden by default */
+    position: absolute;
+    top: 100%; /* Position below the button */
+    right: 0; /* Align to the right */
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 100; /* Ensure it's above other elements in the header */
+    min-width: 180px; /* Minimum width */
+    padding: 8px 0; /* Padding top/bottom */
+}
+
+.more-actions-menu.menu-visible {
+    display: block; /* Show the menu */
+}
+
+.menu-item-button {
+    display: block;
+    width: 100%;
+    padding: 10px 15px;
+    background: none;
+    border: none;
+    color: #c9d1d9;
+    text-align: left;
+    font-size: 0.95em;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.menu-item-button:hover {
+    background-color: #21262d;
+    color: #f0f6fc;
+}
+
+/* --- Responsive Visibility for Header Actions --- */
+/* Hide original buttons and show "more" button on smaller screens */
+@media (max-width: 768px) { /* Adjust breakpoint if needed */
+    .desktop-only-button {
+        display: none !important; /* Hide original buttons */
+    }
+    .mobile-only-button {
+        display: inline-block !important; /* Show the "more" button */
+        padding: 6px 10px; /* Adjust padding for icon button */
+        line-height: 1; /* Ensure icon fits */
+    }
+     /* Adjust header actions alignment on mobile if needed */
+     /* .image-view-actions { justify-content: flex-end; } */
+}
+
+/* Hide "more" button on larger screens (redundant but explicit) */
+@media (min-width: 769px) { /* Adjust breakpoint to match above + 1 */
+     .mobile-only-button {
+        display: none !important;
+    }
 }

@@ -4,6 +4,8 @@
 
 Xây dựng một ứng dụng web thư viện ảnh đơn giản bằng PHP, hỗ trợ nhiều nguồn ảnh, bảo vệ thư mục bằng mật khẩu, xem thống kê và quản lý qua trang admin.
 
+*   **Ưu tiên thiết kế Mobile-First:** Giao diện người dùng sẽ được ưu tiên thiết kế và tối ưu hóa cho trải nghiệm tốt nhất trên các thiết bị di động trước, sau đó mới mở rộng cho màn hình lớn hơn.
+
 ## 2. Công nghệ chính
 
 *   **Backend:** PHP (>= 7.4)
