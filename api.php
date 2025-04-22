@@ -600,6 +600,9 @@ if ($search_term !== null) {
 switch ($action) {
 
     case 'download_zip':
+        @ini_set('max_execution_time', '300'); // 300 seconds = 5 minutes
+        @ini_set('memory_limit', '1024M');    // 1 GB memory limit
+
         // NOTE: This action outputs a file directly, NOT JSON.
         // It needs to handle output buffering carefully.
         $dir_param = $_GET['dir'] ?? null;
@@ -1113,8 +1116,8 @@ switch ($action) {
         }
         error_log("[DEBUG list_files] Access GRANTED for {$current_source_prefixed_path}. Proceeding to list items."); // ADDED LOG
 
-        // --- Increment View Count (Only on first page load) ---
-        if ($page === 1) {
+        // --- Increment View Count (Only on first page load AND for top-level album directories) ---
+        if ($page === 1 && substr_count($current_source_prefixed_path, '/') === 1) {
             try {
                 $sql = "INSERT INTO folder_stats (folder_name, views) VALUES (?, 1) 
                         ON CONFLICT(folder_name) DO UPDATE SET views = views + 1";

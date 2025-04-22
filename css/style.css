@@ -911,3 +911,17 @@ main.container {
 .pswp__button--download-button:hover svg {
     fill: #DDD; /* Lighter gray on hover */
 }
+
+/* --- ADDED: Background Blur for Zip Overlay --- */
+body.body-blur > *:not(#zip-progress-overlay) {
+    filter: blur(4px); /* Điều chỉnh độ mờ nếu cần (vd: 3px, 5px) */
+    transition: filter 0.25s ease-out; /* Hiệu ứng chuyển động mượt */
+    /* Ngăn tương tác với các phần tử bị mờ */
+    pointer-events: none;
+    user-select: none; /* Ngăn chọn text */
+}
+
+/* Thêm transition khi xóa blur để mượt hơn (tùy chọn) */
+body > *:not(#zip-progress-overlay) {
+    transition: filter 0.25s ease-out;
+}

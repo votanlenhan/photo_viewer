@@ -18,6 +18,8 @@ let totalImages = 0;
 const imagesPerPage = 50; 
 const initialLoadLimit = 5; // How many images to load super fast
 const standardLoadLimit = 50; // How many images per page (including subsequent 'load more')
+let zipDownloadTimerId = null; // ADDED: Timer ID for starting zip download
+let zipResetFeedbackTimerId = null; // ADDED: Timer ID for auto-hiding zip feedback
 
 // ========================================
 // === FUNCTION DECLARATIONS             ===
@@ -708,13 +710,13 @@ function debounce(func, wait) {
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    console.log("DOMContentLoaded event fired."); 
+    console.log("DOMContentLoaded event fired.");
 
     // Get elements needed for search and initial view setup
     const searchInput = document.getElementById('searchInput');
     const directoryList = document.getElementById('directory-list');
     const searchPrompt = document.getElementById('search-prompt');
-    console.log("Search elements:", { searchInput, directoryList, searchPrompt }); 
+    console.log("Search elements:", { searchInput, directoryList, searchPrompt });
 
     // --- Initialize App Function ---
     function initializeApp() {
@@ -722,14 +724,14 @@ function debounce(func, wait) {
         // Initial setup: check hash first
         if (!handleUrlHash()) {
             console.log("initializeApp: No valid hash found.");
-            // If no valid hash, show the initial directory view state 
+            // If no valid hash, show the initial directory view state
             showDirectoryView();
-            if (searchPrompt) { 
-                searchPrompt.textContent = 'Đang tải album...'; 
+            if (searchPrompt) {
+                searchPrompt.textContent = 'Đang tải album...';
                 searchPrompt.style.display = 'block';
                 console.log("initializeApp: Set prompt to loading.");
             }
-            if (directoryList) { 
+            if (directoryList) {
                  directoryList.innerHTML = '';
                  console.log("initializeApp: Cleared directory list.");
             }
@@ -743,30 +745,41 @@ function debounce(func, wait) {
 
         // Back button listener
         document.getElementById('backButton').onclick = () => {
-            history.back(); 
+            history.back();
         };
 
         // --- Search Logic Setup (Inside initializeApp) ---
         const performSearch = debounce(async () => {
             const term = searchInput.value.trim();
+            const promptEl = document.getElementById('search-prompt'); // Define promptEl here
+            const listEl = document.getElementById('directory-list'); // Define listEl here
             // Call loadTopLevelDirectories for searching
             // Handle term length < 2 locally before calling API
             if (term.length > 0 && term.length < 2) {
                  if (searchAbortController) { searchAbortController.abort(); }
                  if(promptEl) promptEl.textContent = 'Nhập ít nhất 2 ký tự để tìm kiếm.';
                  if(listEl) listEl.innerHTML = '';
-                 allTopLevelDirs = []; // Clear results
+                 // allTopLevelDirs = []; // Clear results if needed
                  return;
             }
             // Call with term (null if empty, triggering initial load behavior)
              loadTopLevelDirectories(term || null);
-        }, 350); 
+        }, 350);
 
         if (searchInput) {
             searchInput.addEventListener('input', performSearch);
-            console.log("initializeApp: Search listener attached."); 
+            // Clear search button logic
+            const clearSearchBtn = document.getElementById('clearSearch');
+            if (clearSearchBtn) {
+                clearSearchBtn.addEventListener('click', () => {
+                    searchInput.value = ''; // Clear the input
+                    clearSearchBtn.style.display = 'none'; // Hide the button
+                    performSearch(); // Trigger search with empty term (reload initial list)
+                });
+            }
+            console.log("initializeApp: Search listener attached.");
         } else {
-            console.error("Search input element not found! Cannot attach listener."); 
+            console.error("Search input element not found! Cannot attach listener.");
         }
         // --- End Search Logic Setup ---
 
@@ -775,7 +788,104 @@ function debounce(func, wait) {
     // --- End Initialize App Function ---
 
     // Start the app
-    initializeApp(); 
+    initializeApp(); // Call initialization first
+
+    // --- ADDED: Event Listener Setup for ZIP (moved here) ---
+    const imageView = document.getElementById('image-view');
+    const overlay = document.getElementById('zip-progress-overlay');
+    const cancelButton = document.getElementById('cancel-zip-button');
+
+    if (imageView) {
+        // Use event delegation on the container
+        imageView.addEventListener('click', (event) => {
+            // Check if the clicked element is the download link
+            if (event.target && event.target.id === 'download-all-link') {
+                event.preventDefault(); // Prevent default link behavior
+
+                // We need the current folder path. Assume 'currentFolder' state variable holds it.
+                const folderPath = currentFolder;
+                // Try to get a more readable folder name from the header if possible
+                const folderNameElement = document.getElementById('current-directory-name');
+                const folderName = folderNameElement ? folderNameElement.textContent : folderPath;
+
+                if (!folderPath) {
+                    alert('Lỗi: Không thể xác định thư mục hiện tại để tải về.');
+                    return;
+                }
+
+                showZipFeedback(folderName);
+
+                // Schedule the actual download start after a short delay
+                clearTimeout(zipDownloadTimerId); // Clear previous timer
+                zipDownloadTimerId = setTimeout(() => {
+                    console.log("Starting ZIP download for:", folderPath);
+                    window.location.href = getZipDownloadUrl(folderPath);
+                    // Feedback stays visible until cancelled or timeout
+                }, 150); // 150ms delay
+            }
+        });
+    } else {
+        console.error("Image view container not found for attaching download listener.");
+    }
+
+    if (cancelButton) {
+        cancelButton.addEventListener('click', () => {
+            console.log("ZIP download preparation cancelled by user.");
+            hideZipFeedback();
+        });
+    } else {
+         console.error("Cancel ZIP button not found.");
+    }
+
+    if (overlay) {
+        document.addEventListener('keydown', (e) => {
+            // Check if overlay is visible and Escape key is pressed
+            if (overlay.style.display !== 'none' && e.key === 'Escape') {
+                console.log("ZIP download preparation cancelled via Escape key.");
+                hideZipFeedback();
+            }
+        });
+    }
+    // --- End ADDED Event Listener Setup ---
 
 }); // End DOMContentLoaded
+
+// =======================================
+// === ZIP DOWNLOAD FEEDBACK FUNCTIONS ===
+// =======================================
+
+function getZipDownloadUrl(folderPath) {
+    return `api.php?action=download_zip&dir=${encodeURIComponent(folderPath)}`;
+}
+
+function showZipFeedback(folderName) {
+    const overlay = document.getElementById('zip-progress-overlay');
+    const messageEl = document.getElementById('zip-progress-message');
+    if (!overlay || !messageEl) return;
+
+    messageEl.textContent = `Đang chuẩn bị file ZIP cho thư mục "${folderName}", vui lòng chờ...`;
+    overlay.style.display = 'flex'; // Use flex to center content
+    document.body.style.overflow = 'hidden'; // Disable body scroll
+    document.body.classList.add('body-blur'); // ADDED: Add blur class
+
+    // Auto-hide feedback after a while (e.g., 45 seconds)
+    clearTimeout(zipResetFeedbackTimerId); // Clear previous timer if any
+    zipResetFeedbackTimerId = setTimeout(hideZipFeedback, 45000);
+}
+
+function hideZipFeedback() {
+    const overlay = document.getElementById('zip-progress-overlay');
+    if (!overlay) return;
+
+    clearTimeout(zipDownloadTimerId); // Stop the download from starting if it hasn't yet
+    clearTimeout(zipResetFeedbackTimerId); // Stop the auto-hide timer
+
+    overlay.style.display = 'none';
+    document.body.style.overflow = 'auto'; // Re-enable body scroll
+    document.body.classList.remove('body-blur'); // ADDED: Remove blur class
+
+    // Optional: Re-enable the download button if you disabled it
+    // const downloadButton = document.getElementById('download-all-link');
+    // if (downloadButton) downloadButton.disabled = false;
+}
   
