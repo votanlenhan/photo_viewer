@@ -455,7 +455,7 @@ body > *:not(.modal-overlay) {
     display: inline-block; 
 }
 #site-logo {
-    max-height: 40px; /* Default max height */
+    max-height: 60px; /* Further increased default max height */
     width: auto;
     vertical-align: middle; 
 }
@@ -592,6 +592,9 @@ main.container {
         grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); 
         gap: 18px;
     }
+    #site-logo {
+        max-height: 55px; /* Further increased medium screen max height */
+    }
 }
 
 @media (max-width: 480px) {
@@ -657,6 +660,9 @@ main.container {
         padding: 12px 24px; /* Increased padding */
         font-size: 1em;    /* Ensure font size is adequate */
     }
+    #site-logo {
+        max-height: 45px; /* Further increased small screen max height */
+    }
 }
 
 /* --- Footer Styles --- */
@@ -698,7 +704,7 @@ main.container {
         row-gap: 10px; /* Add gap when items wrap to new line */
     }
     #site-logo {
-        max-height: 35px; /* Slightly smaller logo on medium screens */
+        max-height: 55px; /* Further increased medium screen max height */
     }
     #searchInput {
         padding: 12px 20px;
@@ -731,7 +737,7 @@ main.container {
 
 @media (max-width: 480px) {
     #site-logo {
-        max-height: 30px; /* Even smaller logo on small screens */
+        max-height: 45px; /* Further increased small screen max height */
     }
     .image-group {
         column-count: 1; 
