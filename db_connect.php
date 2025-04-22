@@ -14,17 +14,26 @@ $db_pass = ''; // SECURITY: Use a strong password and avoid hardcoding.
 */
 
 // --- Image Source Configuration ---
-// IMPORTANT: Replace the path for 'extra_drive' with the actual absolute path 
+// IMPORTANT: Replace the path for 'extra_drive' with the actual absolute path
 //            to your additional image directory on the other drive.
 //            Ensure the web server process has read access to this directory.
 // Use unique keys for each source (e.g., 'main', 'extra_drive').
 // These keys will be used internally to identify the source.
 define('IMAGE_SOURCES', [
-    'main' => realpath(__DIR__ . '/images'), // Primary source inside the project
-    'extra_drive' => 'G:\\2020',
-    'guu_ssd' => 'D:\\2020' // <--- CORRECTED PATH
+    'main' => [
+        'path' => realpath(__DIR__ . '/images'), // Primary source inside the project
+        // 'name' => 'Thư mục chính' // Optional display name
+    ],
+    'extra_drive' => [
+        'path' => 'G:\\2020',
+        // 'name' => 'Ổ G 2020'
+    ],
+    'guu_ssd' => [
+        'path' => 'D:\\2020',
+        // 'name' => 'SSD Guu 2020'
+    ]
     // Add more sources here if needed, e.g.:
-    // 'network_share' => '/mnt/shared_photos' 
+    // 'network_share' => ['path' => '/mnt/shared_photos', 'name' => 'Network Share']
 ]);
 
 // Validate IMAGE_SOURCES paths

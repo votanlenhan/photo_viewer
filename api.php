@@ -96,48 +96,55 @@ function json_error($msg, $code = 400) {
  * SECURITY: Crucial for preventing path traversal across different sources.
  */
 function validate_source_and_path($source_prefixed_path) {
+    // No need for 'global IMAGE_SOURCES;' - it's a constant.
+    // Access directly using IMAGE_SOURCES
+
+    // *** REMOVING DEBUGGING for global variable check ***
+    // error_log("[validate_source_and_path DEBUG] IMAGE_SOURCES available? " . (isset($IMAGE_SOURCES) ? 'Yes, count=' . count($IMAGE_SOURCES) : 'No'));
+    // if (!isset($IMAGE_SOURCES)) { return null; }
+
     if ($source_prefixed_path === null || $source_prefixed_path === '' || $source_prefixed_path === '/') {
-        // Represents the root level (listing sources) - valid in a sense, but no specific source/path.
-        // Let the caller handle this case (e.g., list available sources).
-        // We can return a specific indicator or let the caller check for empty path.
-        // Returning null might be confusing. Let's return a specific structure for root.
          return ['source_key' => null, 'relative_path' => '', 'absolute_path' => null, 'is_root' => true];
     }
 
-    // 1. Chuẩn hóa dấu phân cách và loại bỏ ký tự nguy hiểm cơ bản
+    // 1. Normalize and split
     $normalized_path = trim(str_replace(['..', '\\', "\0"], '', $source_prefixed_path), '/');
     if ($normalized_path === '') {
-        return ['source_key' => null, 'relative_path' => '', 'absolute_path' => null, 'is_root' => true]; // Case like '//' or '/../'
+        return ['source_key' => null, 'relative_path' => '', 'absolute_path' => null, 'is_root' => true];
     }
-    // Ensure forward slashes for easier parsing
     $normalized_path = str_replace(DIRECTORY_SEPARATOR, '/', $normalized_path);
-
-    // 2. Tách source key và relative path
     $parts = explode('/', $normalized_path, 2);
     $source_key = $parts[0];
-    $relative_path_in_source = $parts[1] ?? ''; // Path within the source, empty if only source key provided
+    $relative_path_in_source = $parts[1] ?? '';
 
-    // 3. Kiểm tra xem source key có hợp lệ không
-    if (!isset(IMAGE_SOURCES[$source_key])) {
+    // 2. Check source key existence using the CONSTANT
+    if (!defined('IMAGE_SOURCES') || !isset(IMAGE_SOURCES[$source_key])) { // Check constant directly
         error_log("Path validation failed: Invalid source key '{$source_key}' in path '{$source_prefixed_path}'");
-        return null; // Invalid source key
+        return null;
     }
-    $source_base_path = IMAGE_SOURCES[$source_key]; // Already validated in db_connect.php
+    // Access the constant correctly
+    $source_config = IMAGE_SOURCES[$source_key];
+    $source_base_path = $source_config['path'];
 
-    // 4. Xây dựng đường dẫn tuyệt đối đích
-    // Combine base path and relative path within the source
+    // 3. Check if the source base path itself is valid (using resolved path)
+    $resolved_source_base_path = @realpath($source_base_path);
+    if ($resolved_source_base_path === false || !is_dir($resolved_source_base_path) || !is_readable($resolved_source_base_path)) {
+        error_log("[validate_source_and_path] Source base path is invalid or not accessible for key '{$source_key}': {$source_base_path} (Resolved: " . ($resolved_source_base_path ?: 'false') . ")");
+        return null; // Source itself is bad
+    }
+    $source_base_path = $resolved_source_base_path; // Use the resolved path from now on
+
+    // 4. Construct target absolute path using the *resolved* source base path
     $target_absolute_path = $source_base_path . ($relative_path_in_source ? DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative_path_in_source) : '');
 
-    // 5. Lấy đường dẫn tuyệt đối thực tế và kiểm tra
-    // Use @realpath to suppress warnings for non-existent paths, we check the result.
+    // 5. Get real path of the target and validate
     $real_target_path = @realpath($target_absolute_path);
 
-    // 6. Kiểm tra tính hợp lệ cuối cùng
-    // - Phải phân giải được thành đường dẫn thực tế (exists)
-    // - Phải là thư mục (vì hàm này dùng cho subdir)
-    // - Phải nằm trong thư mục gốc của nguồn đó (quan trọng nhất!)
+    // 6. Final checks:
+    //    - Must resolve
+    //    - Must be a DIRECTORY
+    //    - Must be within the source's *resolved* base path
     if ($real_target_path === false || !is_dir($real_target_path) || strpos($real_target_path, $source_base_path) !== 0) {
-         // Log more details if validation fails
         $log_details = [
             'requested_path' => $source_prefixed_path,
             'normalized' => $normalized_path,
@@ -145,25 +152,24 @@ function validate_source_and_path($source_prefixed_path) {
             'relative_in_source' => $relative_path_in_source,
             'target_absolute' => $target_absolute_path,
             'real_target' => $real_target_path === false ? 'false' : $real_target_path,
-            'source_base' => $source_base_path,
+            'source_base' => $source_base_path, // Use resolved base path here
             'is_dir' => $real_target_path ? (is_dir($real_target_path) ? 'yes' : 'no') : 'N/A',
             'in_source_base' => ($real_target_path && $source_base_path) ? (strpos($real_target_path, $source_base_path) === 0 ? 'yes' : 'no') : 'N/A'
         ];
-        error_log("Path validation failed for: " . json_encode($log_details));
+        error_log("Path validation failed for directory: " . json_encode($log_details));
         return null; // Invalid path
     }
 
-    // 7. Tính toán lại đường dẫn tương đối chuẩn hóa (so với gốc nguồn)
+    // 7. Calculate final relative path based on realpath
     $final_relative_path = substr($real_target_path, strlen($source_base_path));
     $final_relative_path = ltrim(str_replace(DIRECTORY_SEPARATOR, '/', $final_relative_path), '/');
 
-
-    // 8. Trả về thông tin hợp lệ
+    // 8. Return valid info
     return [
         'source_key' => $source_key,
-        'relative_path' => $final_relative_path, // Relative path *within* the source
-        'absolute_path' => $real_target_path,    // Absolute path on the server
-        'source_prefixed_path' => $final_relative_path === '' ? $source_key : $source_key . '/' . $final_relative_path, // Canonical source-prefixed path
+        'relative_path' => $final_relative_path,
+        'absolute_path' => $real_target_path,
+        'source_prefixed_path' => $final_relative_path === '' ? $source_key : $source_key . '/' . $final_relative_path,
         'is_root' => false
     ];
 }
@@ -259,54 +265,82 @@ function check_folder_access($folder_source_prefixed_path) {
  * @return string|null Source-prefixed relative path of the first image found (e.g., 'main/album/subalbum/image.jpg'), or null if none found.
  */
 function find_first_image_in_source($source_key, $relative_dir_path, &$allowed_ext) {
-    if (!isset(IMAGE_SOURCES[$source_key])) {
-         error_log("[find_thumb] Invalid source key provided: '{$source_key}'");
+    // No need for 'global IMAGE_SOURCES;' - it's a constant.
+
+    // Access the constant directly
+    if (!defined('IMAGE_SOURCES') || !isset(IMAGE_SOURCES[$source_key])) { // Check constant directly
+         error_log("[find_first_image_in_source] Invalid source key provided: '{$source_key}'");
          return null;
     }
-    $source_base_path = IMAGE_SOURCES[$source_key];
-    $start_absolute_path = $source_base_path . ($relative_dir_path ? DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative_dir_path) : '');
-    error_log("[find_thumb DEBUG] Searching for first image in: {$start_absolute_path}"); // DEBUG LOG 7
+    $source_config = IMAGE_SOURCES[$source_key];
+    $source_base_path = $source_config['path'];
+    $resolved_source_base_path = realpath($source_base_path);
 
-    try {
-        if (!is_readable($start_absolute_path) || !is_dir($start_absolute_path)) {
-            error_log("[find_thumb] Directory not readable or not a directory: '{$start_absolute_path}'");
-            return null;
-        }
-
-        $iterator = new DirectoryIterator($start_absolute_path);
-        $first_sub_dir_relative = null; // Relative path of the first subdir found *within current level*
-
-        foreach ($iterator as $fileinfo) {
-            if ($fileinfo->isDot()) continue;
-
-            $filename = $fileinfo->getFilename();
-            $current_relative_path = $relative_dir_path ? $relative_dir_path . '/' . $filename : $filename;
-
-            // Priority 1: Find direct image in current directory
-            if ($fileinfo->isFile() && in_array(strtolower($fileinfo->getExtension()), $allowed_ext, true)) {
-                 // Return the source-prefixed path
-                 $found_path = $source_key . '/' . $current_relative_path;
-                 error_log("[find_thumb DEBUG] Found direct image: {$found_path}"); // DEBUG LOG 8
-                 return $found_path;
-            }
-            // Priority 2: Remember the first subdirectory encountered (relative path within source)
-            if ($first_sub_dir_relative === null && $fileinfo->isDir()) {
-                $first_sub_dir_relative = $current_relative_path;
-            }
-        }
-
-        // Priority 3: If no direct image found, search in the first subdirectory recursively
-        if ($first_sub_dir_relative !== null) {
-            // The path passed to the recursive call is relative to the source base
-            error_log("[find_thumb DEBUG] No direct image, recursing into: {$first_sub_dir_relative}"); // DEBUG LOG 9
-            return find_first_image_in_source($source_key, $first_sub_dir_relative, $allowed_ext);
-        }
-
-    } catch (Throwable $e) {
-        error_log("[find_thumb] ERROR searching in {$start_absolute_path}: " . $e->getMessage());
+    if ($resolved_source_base_path === false) {
+        error_log("[find_first_image_in_source] Source base path does not resolve for key '{$source_key}': {$source_base_path}");
+        return null;
     }
-    error_log("[find_thumb DEBUG] No image found in: {$start_absolute_path}"); // DEBUG LOG 10
-    return null; // No image found
+
+    // Construct the absolute path to the directory to search
+    // Ensure relative_dir_path doesn't have leading/trailing slashes for concatenation
+    $normalized_relative_dir = trim(str_replace(['..', '\\', "\0"], '', $relative_dir_path), '/');
+    $target_dir_absolute = $resolved_source_base_path . (empty($normalized_relative_dir) ? '' : DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $normalized_relative_dir));
+    $resolved_target_dir_absolute = realpath($target_dir_absolute);
+
+    // Check if the target directory is valid and readable
+    if ($resolved_target_dir_absolute === false || !is_dir($resolved_target_dir_absolute) || !is_readable($resolved_target_dir_absolute)) {
+        // Don't log error if the directory simply doesn't exist or isn't readable, common case
+        // error_log("[find_first_image_in_source] Target directory is invalid or not readable for key '{$source_key}', path '{$relative_dir_path}': {$target_dir_absolute}");
+        return null;
+    }
+    
+    // Ensure the target directory is within the source base path (security)
+     if (strpos($resolved_target_dir_absolute, $resolved_source_base_path) !== 0) {
+         error_log("[find_first_image_in_source] Security Check Failed: Target directory '{$resolved_target_dir_absolute}' is outside source base '{$resolved_source_base_path}'.");
+         return null;
+     }
+
+
+    // *** BEGIN RESTORED LOGIC ***
+    try {
+        $directory = new RecursiveDirectoryIterator($resolved_target_dir_absolute, RecursiveDirectoryIterator::SKIP_DOTS | RecursiveDirectoryIterator::FOLLOW_SYMLINKS);
+        $iterator = new RecursiveIteratorIterator($directory, RecursiveIteratorIterator::LEAVES_ONLY);
+        // Sort the iterator to get a predictable order (optional, but good for consistency)
+        // Note: Sorting can be memory intensive for large directories.
+        // $files = iterator_to_array($iterator);
+        // ksort($files); // Sort by path name
+        // $iterator = new ArrayIterator($files);
+        
+        foreach ($iterator as $fileinfo) {
+            // Basic check to prevent processing files outside the *target* directory (security paranoia)
+            // $realPath = $fileinfo->getRealPath();
+            // if (!$realPath || strpos($realPath, $resolved_target_dir_absolute) !== 0) {
+            //     continue; // Should not happen with LEAVES_ONLY from resolved path, but just in case
+            // }
+            
+            if ($fileinfo->isFile() && $fileinfo->isReadable()) {
+                $extension = strtolower($fileinfo->getExtension());
+                if (in_array($extension, $allowed_ext, true)) {
+                    // Found the first valid image!
+                    $image_real_path = $fileinfo->getRealPath();
+                    
+                    // Calculate the path relative to the *original target directory* ($resolved_target_dir_absolute)
+                    $image_relative_path = substr($image_real_path, strlen($resolved_target_dir_absolute));
+                    $image_relative_path = ltrim(str_replace(DIRECTORY_SEPARATOR, '/', $image_relative_path), '/');
+                    
+                    // Return this relative path
+                    return $image_relative_path;
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log("[find_first_image_in_source] Error scanning directory '{$resolved_target_dir_absolute}': " . $e->getMessage());
+        return null;
+    }
+    // *** END RESTORED LOGIC ***
+
+    // If loop completes without finding an image
+    return null;
 }
 
 /**
@@ -450,51 +484,64 @@ function create_thumbnail($source_path, $cache_path, $thumb_size = 150) {
  * @return array|null ['source_key', 'relative_path', 'absolute_path', 'source_prefixed_path'] or null if invalid.
  */
 function validate_source_and_file_path($source_prefixed_path) {
-    if (empty($source_prefixed_path)) {
+    // No need for 'global' - IMAGE_SOURCES is a constant.
+
+    if (!defined('IMAGE_SOURCES') || !is_array(IMAGE_SOURCES)) {
+        error_log("File validation failed: IMAGE_SOURCES constant not defined or not an array.");
         return null;
     }
 
-    // 1. Normalize and remove dangerous characters
+    if ($source_prefixed_path === null || $source_prefixed_path === '' || $source_prefixed_path === '/') {
+         error_log("File validation failed: Path cannot be empty or root.");
+         return null; // Cannot validate root or empty path as a file
+    }
+
+    // 1. Normalize and split (similar to directory validation)
     $normalized_path = trim(str_replace(['..', '\\', "\0"], '', $source_prefixed_path), '/');
     if ($normalized_path === '') {
-        return null;
+         error_log("File validation failed: Normalized path is empty.");
+         return null;
     }
     $normalized_path = str_replace(DIRECTORY_SEPARATOR, '/', $normalized_path);
-
-    // 2. Split source key and relative path
     $parts = explode('/', $normalized_path, 2);
-    if (count($parts) < 2 || empty($parts[1])) { // Must have both source and file/path part
-        error_log("File path validation failed: Path '{$source_prefixed_path}' is missing file part or is just a source key.");
-        return null;
-    }
     $source_key = $parts[0];
-    $relative_path_in_source = $parts[1];
+    $relative_path_in_source = $parts[1] ?? '';
 
-    // 3. Check source key validity
-    if (!isset(IMAGE_SOURCES[$source_key])) {
-        error_log("File path validation failed: Invalid source key '{$source_key}' in path '{$source_prefixed_path}'");
+    // File must have a name within the source
+    if ($relative_path_in_source === '') {
+         error_log("File validation failed: Path refers only to a source key, not a file within it: {$source_prefixed_path}");
         return null;
     }
-    $source_base_path = IMAGE_SOURCES[$source_key];
+
+    // 2. Check source key existence
+    if (!isset(IMAGE_SOURCES[$source_key])) {
+        error_log("File validation failed: Invalid source key '{$source_key}' in path '{$source_prefixed_path}'");
+        return null;
+    }
+    $source_config = IMAGE_SOURCES[$source_key];
+    $source_base_path = $source_config['path'];
+
+    // 3. Check if the source base path itself is valid
+    $resolved_source_base_path = @realpath($source_base_path);
+    if ($resolved_source_base_path === false || !is_dir($resolved_source_base_path) || !is_readable($resolved_source_base_path)) {
+        error_log("[validate_source_and_file_path] Source base path is invalid or not accessible for key '{$source_key}': {$source_base_path} (Resolved: " . ($resolved_source_base_path ?: 'false') . ")");
+        return null; // Source itself is bad
+    }
+    $source_base_path = $resolved_source_base_path; // Use the resolved path
 
     // 4. Construct target absolute path
     $target_absolute_path = $source_base_path . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative_path_in_source);
 
-    // 5. Get real path and validate
+    // 5. Get real path of the target and validate
     $real_target_path = @realpath($target_absolute_path);
 
-    // 6. Final checks:
+    // 6. Final checks for FILE:
     //    - Must resolve
     //    - Must be a FILE
     //    - Must be READABLE
-    //    - Must be within the source's base path
-    if (
-        $real_target_path === false ||
-        !is_file($real_target_path) ||
-        !is_readable($real_target_path) ||
-        strpos($real_target_path, $source_base_path) !== 0
-    ) {
-         $log_details = [
+    //    - Must be within the source's *resolved* base path
+    if ($real_target_path === false || !is_file($real_target_path) || !is_readable($real_target_path) || strpos($real_target_path, $source_base_path) !== 0) {
+        $log_details = [
             'requested_path' => $source_prefixed_path,
             'normalized' => $normalized_path,
             'source_key' => $source_key,
@@ -506,20 +553,20 @@ function validate_source_and_file_path($source_prefixed_path) {
             'is_readable' => $real_target_path ? (is_readable($real_target_path) ? 'yes' : 'no') : 'N/A',
             'in_source_base' => ($real_target_path && $source_base_path) ? (strpos($real_target_path, $source_base_path) === 0 ? 'yes' : 'no') : 'N/A'
         ];
-        error_log("File path validation failed for: " . json_encode($log_details));
-        return null; // Invalid
+        error_log("File validation failed: " . json_encode($log_details));
+        return null; // Invalid path or file
     }
 
-    // 7. Recalculate canonical relative path within source
+    // 7. Calculate final relative path based on realpath (relative to source)
     $final_relative_path = substr($real_target_path, strlen($source_base_path));
     $final_relative_path = ltrim(str_replace(DIRECTORY_SEPARATOR, '/', $final_relative_path), '/');
 
     // 8. Return valid info
     return [
         'source_key' => $source_key,
-        'relative_path' => $final_relative_path,
+        'relative_path' => $final_relative_path, // Path relative to source base
         'absolute_path' => $real_target_path,
-        'source_prefixed_path' => $source_key . '/' . $final_relative_path // Canonical source-prefixed path
+        'source_prefixed_path' => $source_key . '/' . $final_relative_path // Reconstruct canonical source-prefixed path
     ];
 }
 
@@ -920,13 +967,27 @@ switch ($action) {
             }
 
             // --- Iterate through IMAGE_SOURCES --- 
-            foreach (IMAGE_SOURCES as $source_key => $source_base_path) {
-                if (!is_dir($source_base_path) || !is_readable($source_base_path)) {
-                    error_log("[admin_list_folders] Source '{$source_key}' ({$source_base_path}) is not readable or not a directory. Skipping.");
+            foreach (IMAGE_SOURCES as $source_key => $source_config) {
+                // Ensure $source_config is an array and has 'path' key
+                if (!is_array($source_config) || !isset($source_config['path'])) {
+                    error_log("[admin_list_folders] Invalid source config structure for key '{$source_key}'. Skipping.");
+                    continue;
+                }
+                $source_base_path = $source_config['path']; // Get path from config
+                $resolved_source_base_path = realpath($source_base_path); // Resolve it
+
+                // *** DEBUGGING ADDED ***
+                error_log("[admin_list_folders DEBUG] Before check: key={$source_key}, path='{$source_base_path}', resolved_type=" . gettype($resolved_source_base_path) . ", resolved_value=" . print_r($resolved_source_base_path, true));
+                // *** END DEBUGGING ***
+
+                // Check the resolved path (string or false)
+                if ($resolved_source_base_path === false || !is_dir($resolved_source_base_path) || !is_readable($resolved_source_base_path)) {
+                    error_log("[admin_list_folders] Source '{$source_key}' ({$source_base_path} -> " . ($resolved_source_base_path === false ? 'false' : $resolved_source_base_path) . ") is not readable or not a directory. Skipping.");
                     continue;
                 }
                 try {
-                    $iterator = new DirectoryIterator($source_base_path);
+                    // Iterate using the resolved path (which MUST be a string here)
+                    $iterator = new DirectoryIterator($resolved_source_base_path);
                     foreach ($iterator as $fileinfo) {
                         if ($fileinfo->isDot() || !$fileinfo->isDir()) {
                             continue;
@@ -1079,14 +1140,27 @@ switch ($action) {
             $all_subdirs = [];
 
             // Loop through each defined source
-            foreach (IMAGE_SOURCES as $source_key => $source_base_path) {
-                error_log("[list_files - Root] Scanning source: {$source_key} at {$source_base_path}");
+            foreach (IMAGE_SOURCES as $source_key => $source_config) {
+                 // Ensure $source_config is an array and has 'path' key
+                 if (!is_array($source_config) || !isset($source_config['path'])) {
+                     error_log("[list_files - Root] Invalid source config structure for key '{$source_key}'. Skipping.");
+                     continue;
+                 }
+                $source_base_path = $source_config['path']; // Get path from config
+                $resolved_source_base_path = realpath($source_base_path); // Resolve it
+
+                 // *** DEBUGGING ADDED ***
+                 error_log("[list_files - Root DEBUG] Before check: key={$source_key}, path='{$source_base_path}', resolved_type=" . gettype($resolved_source_base_path) . ", resolved_value=" . print_r($resolved_source_base_path, true));
+                 // *** END DEBUGGING ***
+
                 try {
-                    if (!is_dir($source_base_path) || !is_readable($source_base_path)) {
+                    // Check the resolved path (string or false)
+                    if ($resolved_source_base_path === false || !is_dir($resolved_source_base_path) || !is_readable($resolved_source_base_path)) {
                         error_log("[list_files - Root] Source '{$source_key}' is not readable or not a directory. Skipping.");
                         continue;
                     }
-                    $iterator = new DirectoryIterator($source_base_path);
+                    // Iterate using the RESOLVED path (MUST be a string here)
+                    $iterator = new DirectoryIterator($resolved_source_base_path);
                     foreach ($iterator as $fileinfo) {
                         // We only care about DIRECTORIES directly inside the source base path
                         if ($fileinfo->isDot() || !$fileinfo->isDir()) {
@@ -1141,16 +1215,29 @@ switch ($action) {
                 error_log("[list_files - Root] Access check for '{$folder_path_prefixed}': " . json_encode($subfolder_access) . " | Password Required: " . ($password_required ? 'Yes' : 'No'));
 
                 // Always try to find the thumbnail regardless of password status (as requested)
-                $subfolder_relative_path_in_source = $item['name']; // The relative path is just the subdir name itself
-                $thumbnail_relative_path = find_first_image_in_source($item['source_key'], $subfolder_relative_path_in_source, $allowed_ext);
-                error_log("[list_files - Root] Found thumbnail path for '{$folder_path_prefixed}': " . ($thumbnail_relative_path ?? 'None'));
+                $subfolder_relative_path_in_source = $item['name']; // The relative path within the source base is just the subdir name
+                
+                // This function returns the relative path of the image *inside* the subfolder (or null)
+                $first_image_relative_to_subdir = find_first_image_in_source($item['source_key'], $subfolder_relative_path_in_source, $allowed_ext);
+                
+                // *** FIX: Construct the full source-prefixed path for the thumbnail image ***
+                $thumbnail_source_prefixed_path = null;
+                if ($first_image_relative_to_subdir !== null) {
+                    // Combine the subfolder's source-prefixed path with the image's relative path within it
+                    $thumbnail_source_prefixed_path = $folder_path_prefixed . '/' . $first_image_relative_to_subdir;
+                     // Normalize just in case find_first_image_in_source returns leading slash (it shouldn't)
+                     $thumbnail_source_prefixed_path = str_replace('//', '/', $thumbnail_source_prefixed_path);
+                }
+                // *** END FIX ***
+
+                error_log("[list_files - Root] Found thumbnail path for '{$folder_path_prefixed}': " . ($thumbnail_source_prefixed_path ?? 'None')); // Log the corrected path
 
                 $folders_data[] = [
                     'name' => $item['name'],
                     'type' => 'folder',
                     'path' => $folder_path_prefixed, // Source-prefixed path for navigation
                     'password_required' => $password_required, // Still indicate if password is needed
-                    'thumbnail' => $thumbnail_relative_path // Always include thumbnail path if found
+                    'thumbnail' => $thumbnail_source_prefixed_path // Use the full, source-prefixed path
                 ];
             }
 
@@ -1269,7 +1356,8 @@ switch ($action) {
                              'name' => $item['name'],
                              'type' => 'folder',
                              'path' => $folder_path_prefixed,
-                            'password_required' => true
+                             'password_required' => true,
+                             'thumbnail' => null // No thumbnail shown if password required initially
                          ];
                      } // Else: skip inaccessible/error folders
                      error_log("[list_files DEBUG] Folder '{$folder_path_prefixed}' skipped (unauthorized or error).");
@@ -1279,21 +1367,36 @@ switch ($action) {
                 // Find thumbnail for accessible subfolder
                 // Need the relative path *within* the source for find_first_image
                 $subfolder_relative_path = substr($folder_path_prefixed, strlen($source_key) + 1); // +1 for the slash
-                $thumbnail_relative_path = find_first_image_in_source($source_key, $subfolder_relative_path, $allowed_ext);
+
+                // This function returns the relative path of the image *inside* the subfolder
+                $first_image_relative_to_subdir = find_first_image_in_source($source_key, $subfolder_relative_path, $allowed_ext);
+
+                // *** FIX: Construct the full source-prefixed path for the thumbnail image ***
+                $thumbnail_source_prefixed_path = null;
+                if ($first_image_relative_to_subdir !== null) {
+                    // Combine the subfolder's source-prefixed path with the image's relative path within it
+                    $thumbnail_source_prefixed_path = $folder_path_prefixed . '/' . $first_image_relative_to_subdir;
+                     // Normalize just in case find_first_image_in_source returns leading slash
+                     $thumbnail_source_prefixed_path = str_replace('//', '/', $thumbnail_source_prefixed_path);
+                     error_log("[list_files DEBUG] Constructed thumbnail path for '{$folder_path_prefixed}': {$thumbnail_source_prefixed_path}"); // DEBUG LOG 7
+                } else {
+                     error_log("[list_files DEBUG] No first image found for thumbnail in '{$folder_path_prefixed}'"); // DEBUG LOG 8
+                }
+                // *** END FIX ***
 
                 $folders_data[] = [
                     'name' => $item['name'],
                     'type' => 'folder',
                     'path' => $folder_path_prefixed, // Use source-prefixed path for navigation
                     'password_required' => false,
-                    'thumbnail' => $thumbnail_relative_path // Use source-prefixed path for thumbnail request
+                    'thumbnail' => $thumbnail_source_prefixed_path // Use the corrected, full source-prefixed path
                 ];
-            } else {
-                // --- Process IMAGE File --- 
+            } else { // Item is a file
+                // --- Process IMAGE File ---
                 $absolutePath = $item['fileinfo']; // Get absolute path stored earlier
                 $width = null;
                 $height = null;
-                
+
                 // Get dimensions ONLY for paginated items
                 try {
                     $imageSize = @getimagesize($absolutePath);
@@ -1312,19 +1415,19 @@ switch ($action) {
                 $files_data[] = [
                     'name' => $item['name'],
                     'type' => 'file',
-                    'path' => $item['path'], 
-                    'width' => $width, // Add calculated width
-                    'height' => $height // Add calculated height
+                    'path' => $item['path'], // Already source-prefixed
+                    'width' => $width,
+                    'height' => $height
                 ];
-            }
-        }
+            } // End if ($item['is_dir'])
+        } // End foreach ($paginated_items as $item)
 
-        // --- Final Response --- 
+        // --- Final Non-Root Response ---
         $final_response_data = [
             'files' => $files_data,
             'folders' => $folders_data,
             'breadcrumb' => $breadcrumb,
-            'current_dir' => $current_source_prefixed_path, // Send back the source-prefixed path
+            'current_dir' => $current_source_prefixed_path,
             'pagination' => [
                 'current_page' => $page,
                 'total_pages' => $total_pages,
@@ -1332,9 +1435,9 @@ switch ($action) {
             ],
             'is_root' => false
         ];
-        error_log("[list_files DEBUG] Data before json_response: " . json_encode($final_response_data)); // DEBUG LOG 11
+        error_log("[list_files DEBUG] Data before json_response: " . json_encode($final_response_data)); // DEBUG LOG 9
         json_response($final_response_data);
-        break;
+        break; // End case 'list_files'
 
     case 'get_thumbnail':
         $requested_path = $_GET['path'] ?? null;
