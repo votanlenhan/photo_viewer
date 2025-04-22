@@ -324,6 +324,52 @@ img[src$=".svg"] { /* Nếu dùng SVG placeholder */
     min-height: 1.2em; text-align: left;
 }
 
+/* --- ADDED: Zip Progress Box Styling (similar to password prompt) --- */
+.zip-progress-box {
+    background: #161b22; /* Nền box tối */
+    padding: 30px 35px;
+    border-radius: 8px;
+    border: 1px solid #30363d;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    text-align: center;
+    width: 100%;
+    max-width: 400px; /* Giống password prompt */
+    color: #c9d1d9; /* Chữ trong box */
+}
+
+.zip-progress-box p {
+    margin-bottom: 20px; /* Đã thêm vào HTML style, nhưng để đây cho rõ */
+    font-size: 1em;
+    line-height: 1.5;
+}
+
+/* Spinner Styling (Basic Example - Replace with your actual spinner) */
+.zip-progress-box .spinner {
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s ease-in-out infinite;
+    margin: 0 auto 15px auto; /* Center the spinner */
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Style the cancel button like the password prompt cancel */
+.zip-progress-box #cancel-zip-button {
+    background-color: #6c757d; /* Gray background */
+    border-color: #6c757d;
+    padding: 10px 20px; /* Consistent padding */
+    min-width: 110px; /* Consistent min-width */
+}
+.zip-progress-box #cancel-zip-button:hover {
+    background-color: #5a6268;
+    border-color: #5a6268;
+}
+
 /* --- General Helper Classes --- */
 .hidden { display: none; }
 
