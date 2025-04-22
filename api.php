@@ -229,42 +229,46 @@ function sanitize_subdir($subdir) {
  */
 function check_folder_access($folder_source_prefixed_path) {
     global $pdo;
-    error_log("[DEBUG check_folder_access] Checking access for: '{$folder_source_prefixed_path}'"); // ADDED LOG
+    error_log("[DEBUG check_folder_access] Checking access for: '{$folder_source_prefixed_path}'");
     // Handle root access (listing sources) - always allowed publicly
     if (empty($folder_source_prefixed_path)) {
-        error_log("[DEBUG check_folder_access] Path is empty (root access). Returning authorized=true."); // ADDED LOG
-        return ['authorized' => true];
+        error_log("[DEBUG check_folder_access] Path is empty (root access). Returning authorized=true.");
+        // Root is considered not protected and authorized
+        return ['protected' => false, 'authorized' => true, 'password_required' => false];
     }
     try {
         // Use the source-prefixed path directly as the key
         $stmt = $pdo->prepare("SELECT password_hash FROM folder_passwords WHERE folder_name = ? LIMIT 1");
         $stmt->execute([$folder_source_prefixed_path]);
         $row = $stmt->fetch();
-        $found_hash = $row ? 'Yes' : 'No'; // ADDED
-        error_log("[DEBUG check_folder_access] Found password hash in DB? {$found_hash}"); // ADDED LOG
+        $is_protected = ($row !== false); // Folder is protected if a password hash exists
+        $found_hash = $is_protected ? 'Yes' : 'No';
+        error_log("[DEBUG check_folder_access] Found password hash in DB? {$found_hash}");
 
-        if (!$row) {
-            error_log("[DEBUG check_folder_access] No password set. Returning authorized=true."); // ADDED LOG
-            return ['authorized' => true]; // No password set for this folder
+        if (!$is_protected) {
+            error_log("[DEBUG check_folder_access] Not protected. Returning protected=false, authorized=true.");
+            return ['protected' => false, 'authorized' => true, 'password_required' => false]; // Not protected, always authorized
         }
 
-        // Check session using the source-prefixed path as the key
+        // If protected, check session authorization
         $session_key = 'authorized_folders';
         $is_authorized_in_session = !empty($_SESSION[$session_key][$folder_source_prefixed_path]);
-        $session_status_log = $is_authorized_in_session ? 'Yes' : 'No'; // ADDED
-        error_log("[DEBUG check_folder_access] Is authorized in session (\$_SESSION['{$session_key}']['{$folder_source_prefixed_path}'])? {$session_status_log}"); // ADDED LOG
+        $session_status_log = $is_authorized_in_session ? 'Yes' : 'No';
+        error_log("[DEBUG check_folder_access] Is authorized in session (\$_SESSION['{$session_key}']['{$folder_source_prefixed_path}'])? {$session_status_log}");
         
         if ($is_authorized_in_session) {
-            error_log("[DEBUG check_folder_access] Authorized via session. Returning authorized=true."); // ADDED LOG
-            return ['authorized' => true]; // Authorized in session
+            error_log("[DEBUG check_folder_access] Protected but authorized via session. Returning protected=true, authorized=true.");
+            return ['protected' => true, 'authorized' => true, 'password_required' => false]; // Protected, but authorized in session
         }
         
-        error_log("[DEBUG check_folder_access] Password required, not authorized in session. Returning authorized=false, password_required=true."); // ADDED LOG
-        return ['authorized' => false, 'password_required' => true]; // Needs password
+        // If protected and not authorized in session, password is required
+        error_log("[DEBUG check_folder_access] Protected and requires password. Returning protected=true, authorized=false, password_required=true.");
+        return ['protected' => true, 'authorized' => false, 'password_required' => true]; // Protected, needs password
 
     } catch (PDOException $e) {
         error_log("DB Error checking folder access for '{$folder_source_prefixed_path}': " . $e->getMessage());
-        return ['authorized' => false, 'error' => 'Lỗi server khi kiểm tra quyền truy cập.'];
+        // Return as protected and unauthorized on DB error
+        return ['protected' => true, 'authorized' => false, 'error' => 'Lỗi server khi kiểm tra quyền truy cập.'];
     }
 }
 
@@ -1019,6 +1023,18 @@ switch ($action) {
             $folders_data = []; // This will hold the final folder data for JSON
             $files_data = [];   // Will remain empty for root view
 
+            // Fetch all protected folder names once for efficiency in root view
+            $all_protected_folders = [];
+            try {
+                $stmt = $pdo->query("SELECT folder_name FROM folder_passwords");
+                while ($protected_folder = $stmt->fetchColumn()) {
+                    $all_protected_folders[$protected_folder] = true;
+                }
+            } catch (PDOException $e) {
+                error_log("[list_files - Root] Error fetching protected folders: " . $e->getMessage());
+                // Continue without protected status if DB fails, maybe?
+            }
+
             foreach ($paginated_items as $item) {
                 // Item already contains name, path, source_key, fileinfo
                 error_log("[list_files - Root] Processing paginated subdir: " . $item['name'] . " (Path: " . $item['path'] . ")");
@@ -1026,8 +1042,7 @@ switch ($action) {
                 
                 // Check access for subfolder
                 $subfolder_access = check_folder_access($folder_path_prefixed);
-                $password_required = !$subfolder_access['authorized'] && !empty($subfolder_access['password_required']);
-                error_log("[list_files - Root] Access check for '{$folder_path_prefixed}': " . json_encode($subfolder_access) . " | Password Required: " . ($password_required ? 'Yes' : 'No'));
+                error_log("[list_files - Root] Access check result for '{$folder_path_prefixed}': " . json_encode($subfolder_access));
 
                 // Always try to find the thumbnail regardless of password status (as requested)
                 $subfolder_relative_path_in_source = $item['name']; // The relative path within the source base is just the subdir name
@@ -1051,7 +1066,9 @@ switch ($action) {
                     'name' => $item['name'],
                     'type' => 'folder',
                     'path' => $folder_path_prefixed, // Source-prefixed path for navigation
-                    'password_required' => $password_required, // Still indicate if password is needed
+                    'protected' => $subfolder_access['protected'],       // ADDED
+                    'authorized' => $subfolder_access['authorized'],      // ADDED
+                    // 'password_required' => $subfolder_access['password_required'], // Redundant if using protected/authorized flags
                     'thumbnail' => $thumbnail_source_prefixed_path // Use the full, source-prefixed path
                 ];
             }
@@ -1177,7 +1194,8 @@ switch ($action) {
                              'name' => $item['name'],
                              'type' => 'folder',
                              'path' => $folder_path_prefixed,
-                             'password_required' => true,
+                             'protected' => true,
+                             'authorized' => false,
                              'thumbnail' => null // No thumbnail shown if password required initially
                          ];
                      } // Else: skip inaccessible/error folders
@@ -1209,7 +1227,8 @@ switch ($action) {
                     'name' => $item['name'],
                     'type' => 'folder',
                     'path' => $folder_path_prefixed, // Use source-prefixed path for navigation
-                    'password_required' => false,
+                    'protected' => $subfolder_access['protected'], // Will be true if unlocked, false if public
+                    'authorized' => $subfolder_access['authorized'], // Will be true if authorized, false if unauthorized
                     'thumbnail' => $thumbnail_source_prefixed_path // Use the corrected, full source-prefixed path
                 ];
             } else { // Item is a file

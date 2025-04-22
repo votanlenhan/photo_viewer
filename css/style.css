@@ -294,7 +294,7 @@ img[src$=".svg"] { /* Nếu dùng SVG placeholder */
 .password-prompt-overlay {
     /* Kế thừa từ style.css cũ, có thể điều chỉnh nếu cần */
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background-color: rgba(13, 17, 23, 0.85); /* Nền tối hơn */
+    background-color: rgba(13, 17, 23, 0.9); /* Slightly increased opacity */
     display: flex; justify-content: center; align-items: center;
     z-index: 1001; padding: 20px; box-sizing: border-box;
 }

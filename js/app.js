@@ -83,7 +83,7 @@ function debounce(func, wait) {
         <h3>Nhập mật khẩu</h3>
         <p>Album "<strong>${folderName}</strong>" được bảo vệ. Vui lòng nhập mật khẩu:</p>
         <div id="promptError" class="error-message"></div>
-        <input type="password" id="promptInput" placeholder="Mật khẩu..." autocomplete="off">
+        <input type="password" id="promptInput" placeholder="Mật khẩu..." autocomplete="new-password">
                 <div class="prompt-actions">
           <button id="promptOk" class="button">Xác nhận</button>
           <button id="promptCancel" class="button" style="background:#6c757d;">Hủy</button>
@@ -199,16 +199,22 @@ function debounce(func, wait) {
     
         const span = document.createElement('span');
         span.textContent = dir.name; // Use dir.name for display text
-        // ADD LOCK ICON if password required
-        if (dir.password_required) {
-            span.innerHTML += ' <span class="lock-icon" title="Yêu cầu mật khẩu">🔒</span>';
+        // ADD LOCK/UNLOCK ICON based on protected and authorized status
+        if (dir.protected) {
+            if (dir.authorized) {
+                span.innerHTML += ' <span class="lock-icon unlocked" title="Đã mở khóa">🔓</span>';
+            } else {
+                span.innerHTML += ' <span class="lock-icon locked" title="Yêu cầu mật khẩu">🔒</span>';
+            }
         }
     
             a.append(img, span);
-        // MODIFY onClick based on password requirement
-        if (dir.password_required) {
+        // MODIFY onClick based on protected and authorized status
+        if (dir.protected && !dir.authorized) {
+            // Protected and not authorized -> Show prompt
             a.onclick = e => { e.preventDefault(); showPasswordPrompt(dir.path); };
         } else {
+             // Public or already authorized -> Navigate directly
              a.onclick = e => { e.preventDefault(); navigateToFolder(dir.path); }; // Use dir.path for navigation
         }
             li.appendChild(a);
@@ -374,16 +380,22 @@ function debounce(func, wait) {
 
             const span = document.createElement('span');
             span.textContent = sf.name; // Use sf.name for display text
-             // ADD LOCK ICON if password required
-             if (sf.password_required) {
-                 span.innerHTML += ' <span class="lock-icon" title="Yêu cầu mật khẩu">🔒</span>';
+             // ADD LOCK/UNLOCK ICON based on protected and authorized status
+             if (sf.protected) {
+                 if (sf.authorized) {
+                     span.innerHTML += ' <span class="lock-icon unlocked" title="Đã mở khóa">🔓</span>';
+                 } else {
+                     span.innerHTML += ' <span class="lock-icon locked" title="Yêu cầu mật khẩu">🔒</span>';
+                 }
              }
 
                 a.append(img, span);
-             // MODIFY onClick based on password requirement
-             if (sf.password_required) {
+             // MODIFY onClick based on protected and authorized status
+             if (sf.protected && !sf.authorized) {
+                 // Protected and not authorized -> Show prompt
                  a.onclick = e => { e.preventDefault(); showPasswordPrompt(sf.path); };
              } else {
+                  // Public or already authorized -> Navigate directly
                   a.onclick = e => { e.preventDefault(); navigateToFolder(sf.path); }; // Use sf.path for navigation
              }
                 li.appendChild(a);
