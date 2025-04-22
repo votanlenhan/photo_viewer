@@ -203,25 +203,36 @@ function debounce(func, wait) {
     
         const span = document.createElement('span');
         span.textContent = dir.name; // Use dir.name for display text
-        // ADD LOCK/UNLOCK ICON based on protected and authorized status
+
+        // Create a container for icon and text
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'directory-item-content'; // Add a class for styling
+
+        // Always create the icon span for consistent spacing
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'lock-icon'; // Add base class always
+
+        // ADD LOCK/UNLOCK ICON *BEFORE* the text span - ONLY IF protected
         if (dir.protected) {
             if (dir.authorized) {
-                span.innerHTML += ' <span class="lock-icon unlocked" title="Đã mở khóa">🔓</span>';
+                iconSpan.classList.add('unlocked');
+                iconSpan.title = 'Đã mở khóa';
+                iconSpan.innerHTML = '🔓'; // Or use an <i> tag if preferred
             } else {
-                span.innerHTML += ' <span class="lock-icon locked" title="Yêu cầu mật khẩu">🔒</span>';
+                iconSpan.classList.add('locked');
+                iconSpan.title = 'Yêu cầu mật khẩu';
+                iconSpan.innerHTML = '🔒'; // Or use an <i> tag if preferred
             }
-        }
-    
-            a.append(img, span);
-        // MODIFY onClick based on protected and authorized status
-        if (dir.protected && !dir.authorized) {
-            // Protected and not authorized -> Show prompt
-            a.onclick = e => { e.preventDefault(); showPasswordPrompt(dir.path); };
         } else {
-             // Public or already authorized -> Navigate directly
-             a.onclick = e => { e.preventDefault(); navigateToFolder(dir.path); }; // Use dir.path for navigation
+             // Keep the span empty but present for spacing
+             // Ensure it takes up space via CSS (min-width)
         }
-            li.appendChild(a);
+
+        contentWrapper.appendChild(iconSpan); // Add icon span (potentially empty)
+        contentWrapper.appendChild(span);     // Add text span after icon span
+
+        a.append(img, contentWrapper); // Append image and the content wrapper
+        li.appendChild(a);
         listEl.appendChild(li);
     });
   }

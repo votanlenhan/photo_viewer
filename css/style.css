@@ -1099,3 +1099,31 @@ main.container {
         display: none !important;
     }
 }
+
+/* Style for the content wrapper inside directory item link */
+.directory-item-content {
+    display: flex; /* Use flex to align icon and text */
+    align-items: center; /* Vertically align icon and text */
+    overflow: hidden; /* Prevent content from overflowing */
+}
+
+/* Ensure the text span still handles overflow */
+.directory-item-content > span:last-child { /* Target the text span specifically */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-grow: 1; /* Allow text to take remaining space */
+}
+
+.lock-icon {
+    font-size: 0.9em; /* Adjust icon size if needed */
+    flex-shrink: 0; /* Prevent icon from shrinking */
+    display: inline-block; /* Needed for width/height/margins */
+    min-width: 20px; /* Set minimum width for spacing (adjust as needed) */
+    text-align: center; /* Center the icon within its space */
+    margin-right: 6px; /* Add margin to create space AFTER the icon */
+}
+
+/* Optional: Style locked/unlocked icons differently if desired */
+.lock-icon.locked { /* Styles for locked icon */ }
+.lock-icon.unlocked { /* Styles for unlocked icon */ }
