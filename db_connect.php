@@ -21,7 +21,8 @@ $db_pass = ''; // SECURITY: Use a strong password and avoid hardcoding.
 // These keys will be used internally to identify the source.
 define('IMAGE_SOURCES', [
     'main' => realpath(__DIR__ . '/images'), // Primary source inside the project
-    'extra_drive' => 'G:\\2020' // <--- CORRECTED PATH
+    'extra_drive' => 'G:\\2020'
+    'Guu_ssd' => 'D:\\2020' // <--- CORRECTED PATH
     // Add more sources here if needed, e.g.:
     // 'network_share' => '/mnt/shared_photos' 
 ]);
