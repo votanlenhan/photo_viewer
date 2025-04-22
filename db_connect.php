@@ -21,25 +21,34 @@ $db_pass = ''; // SECURITY: Use a strong password and avoid hardcoding.
 // These keys will be used internally to identify the source.
 define('IMAGE_SOURCES', [
     'main' => realpath(__DIR__ . '/images'), // Primary source inside the project
-    'extra_drive' => 'G:\\2020'
-    'Guu_ssd' => 'D:\\2020' // <--- CORRECTED PATH
+    'extra_drive' => 'G:\\2020',
+    'guu_ssd' => 'D:\\2020' // <--- CORRECTED PATH
     // Add more sources here if needed, e.g.:
     // 'network_share' => '/mnt/shared_photos' 
 ]);
 
 // Validate IMAGE_SOURCES paths
+/* Commenting out strict validation here. Validation will be done by consumer scripts (API, Cron).
 foreach (IMAGE_SOURCES as $key => $path) {
-    if ($path === false || !is_dir($path) || !is_readable($path)) {
+    // Convert potential relative paths (like from __DIR__) to absolute paths
+    $resolved_path = realpath($path);
+
+    if ($resolved_path === false || !is_dir($resolved_path) || !is_readable($resolved_path)) {
         // Log a fatal error and stop execution if any source is invalid
-        $error_msg = "CRITICAL CONFIG ERROR: Image source '{$key}' is invalid or not readable: '{$path}'. Check path and permissions.";
-        error_log($error_msg); 
+        $error_msg = "CRITICAL CONFIG ERROR: Image source '{$key}' is invalid or not readable: '{$path}' (Resolved: '" . ($resolved_path ?: 'false') . "'). Check path and permissions.";
+        error_log($error_msg);
         // Display a user-friendly error if possible (might fail if headers already sent)
         if (!headers_sent()) {
              header('Content-Type: text/plain; charset=utf-8', true, 500);
         }
-        die("Server Configuration Error: One or more image sources are invalid. Please check server logs.");
+        // die() prevents scripts like api.php from handling the missing source gracefully.
+         die("Server Configuration Error: One or more image sources are invalid. Please check server logs.");
     }
+    // Optional: Update the array with the resolved path?
+    // define('IMAGE_SOURCES', array_merge(IMAGE_SOURCES, [$key => $resolved_path])); // This won't work with define
+    // Better to let consumer scripts resolve paths if needed, or ensure paths in define() are absolute.
 }
+*/
 
 // --- Cache and Thumbnail Configuration ---
 define('ALLOWED_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']);
