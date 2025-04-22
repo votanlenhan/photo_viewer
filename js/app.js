@@ -92,6 +92,7 @@ function debounce(func, wait) {
                 </div>
             </div>`;
     overlay.style.display = 'flex';
+    document.body.classList.add('body-blur'); // ADDED: Add blur class
     const input = document.getElementById('promptInput');
     const ok    = document.getElementById('promptOk');
     const cancel= document.getElementById('promptCancel');
@@ -144,6 +145,7 @@ function debounce(func, wait) {
   function hidePasswordPrompt() {
     const overlay = document.getElementById('passwordPromptOverlay');
     overlay.style.display = 'none';
+    document.body.classList.remove('body-blur'); // ADDED: Remove blur class
     overlay.innerHTML = '';
   }
   

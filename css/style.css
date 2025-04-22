@@ -913,7 +913,7 @@ main.container {
 }
 
 /* --- ADDED: Background Blur for Zip Overlay --- */
-body.body-blur > *:not(#zip-progress-overlay) {
+body.body-blur > *:not(#zip-progress-overlay):not(#passwordPromptOverlay) {
     filter: blur(4px); /* Điều chỉnh độ mờ nếu cần (vd: 3px, 5px) */
     transition: filter 0.25s ease-out; /* Hiệu ứng chuyển động mượt */
     /* Ngăn tương tác với các phần tử bị mờ */
@@ -922,6 +922,6 @@ body.body-blur > *:not(#zip-progress-overlay) {
 }
 
 /* Thêm transition khi xóa blur để mượt hơn (tùy chọn) */
-body > *:not(#zip-progress-overlay) {
+body > *:not(#zip-progress-overlay):not(#passwordPromptOverlay) {
     transition: filter 0.25s ease-out;
 }
