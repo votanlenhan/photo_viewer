@@ -1,76 +1,87 @@
-# Project Context: Simple PHP Photo Gallery
+# Bối cảnh Dự án: Thư viện Ảnh PHP Đơn giản
 
 ## 1. Mục tiêu Dự án
 
-Xây dựng một ứng dụng web thư viện ảnh đơn giản bằng PHP, hỗ trợ nhiều nguồn ảnh, bảo vệ thư mục bằng mật khẩu, xem thống kê và quản lý qua trang admin.
-
-*   **Ưu tiên thiết kế Mobile-First:** Giao diện người dùng sẽ được ưu tiên thiết kế và tối ưu hóa cho trải nghiệm tốt nhất trên các thiết bị di động trước, sau đó mới mở rộng cho màn hình lớn hơn.
+*   **Mục tiêu chính:** Xây dựng một ứng dụng web thư viện ảnh đơn giản, hiệu quả và hấp dẫn về mặt hình ảnh bằng PHP.
+*   **Đối tượng người dùng:** Chủ yếu là khách hàng của Guustudio để xem và tải ảnh, có khả năng bảo vệ bằng mật khẩu cho các album cụ thể.
+*   **Ưu tiên thiết kế:** Ưu tiên trải nghiệm Mobile-First, giao diện sạch sẽ, chủ đề tối lấy cảm hứng từ GitHub.
 
 ## 2. Công nghệ chính
 
 *   **Backend:** PHP (>= 7.4)
 *   **Database:** SQLite (lưu mật khẩu thư mục và thống kê)
-*   **Frontend:** JavaScript thuần (ES Modules), CSS
-*   **Thư viện:** PhotoSwipe 5 (xem ảnh)
+*   **Frontend:** JavaScript thuần (ES Modules), CSS, HTML
+*   **Thư viện JS:** PhotoSwipe 5 (xem ảnh)
 *   **Server:** Web server hỗ trợ PHP (ví dụ: XAMPP, Apache, Nginx)
-*   **PHP Extensions:** pdo_sqlite, gd, zip, mbstring, fileinfo
+*   **PHP Extensions yêu cầu:** pdo_sqlite, gd, zip, mbstring, fileinfo
 
-## 3. Thành phần & Tệp quan trọng
+## 3. Cấu trúc Dự án & Tệp quan trọng
 
-*   **User Frontend:**
-    *   `index.php`: Giao diện chính (đã đổi từ .html để đọc config).
-    *   `js/app.js`: Xử lý logic frontend.
-    *   `css/style.css`: Định dạng giao diện (bao gồm cả các class `.modal-overlay`, `.modal-box` cho các lớp phủ).
-*   **Admin:**
-    *   `login.php`: Trang đăng nhập admin (đọc username/hash từ `config.php`).
-    *   `admin.php`: Giao diện trang quản trị.
-    *   `js/admin.js`: Xử lý logic admin.
-*   **Backend API:**
-    *   `api.php`: Xử lý logic chính (sử dụng các cài đặt từ `config.php` như giới hạn ZIP, phân trang).
-    *   **Hàm helper quan trọng trong `api.php`:**
-        *   `validate_source_and_path()`: Xác thực đường dẫn thư mục có tiền tố nguồn, chống path traversal.
-        *   `validate_source_and_file_path()`: Xác thực đường dẫn tệp có tiền tố nguồn.
-        *   `check_folder_access()`: Kiểm tra quyền truy cập thư mục (dựa trên DB/Session).
-        *   `create_thumbnail()`: Tạo ảnh thumbnail bằng GD.
+*   **Giao diện Người dùng (Frontend):**
+    *   `index.php`: Trang chính, hiển thị danh sách thư mục hoặc ảnh.
+    *   `js/app.js`: Xử lý logic phía client (tải dữ liệu, điều hướng, hiển thị modal, PhotoSwipe, tìm kiếm, v.v.).
+    *   `css/style.css`: Định dạng giao diện, bao gồm các class chung cho modal (`.modal-overlay`, `.modal-box`).
+*   **Quản trị (Admin):**
+    *   `login.php`: Trang đăng nhập admin.
+    *   `admin.php`: Trang quản lý mật khẩu thư mục và xem thống kê.
+    *   `js/admin.js`: Logic phía client cho trang admin.
+*   **API (Backend):**
+    *   `api.php`: Điểm cuối xử lý các yêu cầu từ frontend (liệt kê file, xác thực, tạo ZIP, lấy ảnh/thumbnail, các action admin).
+    *   **Hàm helper quan trọng:** `validate_source_and_path()`, `validate_source_and_file_path()`, `check_folder_access()`, `create_thumbnail()`.
 *   **Cấu hình & Dữ liệu:**
-    *   `config.php`: **File cấu hình trung tâm.** Chứa đường dẫn DB, thông tin admin, nguồn ảnh, cài đặt cache, giới hạn API, cài đặt log, tiêu đề ứng dụng.
-    *   `db_connect.php`: **Quan trọng.**
-        *   `require` file `config.php`.
-        *   Kết nối PDO đến SQLite (dựa trên `config.php`).
-        *   Xác thực các nguồn ảnh từ `config.php` và định nghĩa hằng số `IMAGE_SOURCES` với các nguồn hợp lệ.
-        *   Định nghĩa các hằng số `CACHE_THUMB_ROOT`, `ALLOWED_EXTENSIONS`, `THUMBNAIL_SIZES` (dựa trên `config.php`).
-        *   Tự động tạo bảng DB nếu chưa có.
-    *   `database.sqlite`: Tệp cơ sở dữ liệu.
-    *   `cache/thumbnails/`: Thư mục chứa ảnh thumbnail đã cache.
-    *   `images/`: Thư mục nguồn ảnh mặc định (tham chiếu từ `config.php`).
-    *   `logs/`: Chứa các tệp log.
-*   **Cron/Scheduled Tasks:**
-    *   `cron_cache_manager.php`: Xóa thumbnail cache cũ.
-    *   `cron_log_cleaner.php`: Xoay vòng và xóa file log cũ (đọc cấu hình từ `config.php`).
-    *   `run_cache_cleanup.bat`: File batch để chạy các script cron.
+    *   `config.php`: **File cấu hình trung tâm** (thông tin DB, admin, nguồn ảnh, cài đặt cache, giới hạn API, log, tiêu đề). **QUAN TRỌNG:** Không đưa file này lên repo công khai nếu chứa thông tin nhạy cảm.
+    *   `db_connect.php`: **File thiết lập cốt lõi.** `require` file `config.php`, kết nối DB, xác thực và định nghĩa nguồn ảnh (`IMAGE_SOURCES`), định nghĩa hằng số cache/extensions, tự động tạo bảng DB.
+    *   `database.sqlite`: Tệp cơ sở dữ liệu SQLite.
+    *   `cache/thumbnails/`: Thư mục lưu trữ thumbnail đã tạo.
+    *   `images/`: Thư mục nguồn ảnh mặc định (có thể thay đổi/thêm trong `config.php`).
+    *   `logs/`: Thư mục chứa file log ứng dụng.
+*   **Tác vụ nền (Cron/Scheduled Tasks):**
+    *   `cron_cache_manager.php`: Dọn dẹp thumbnail cũ/mồ côi.
+    *   `cron_log_cleaner.php`: Xoay vòng/xóa file log cũ.
+    *   `run_cache_cleanup.bat`: Ví dụ file batch để chạy các script cron trên Windows.
 
 ## 4. Luồng hoạt động & Khái niệm chính
 
-*   **Đa nguồn ảnh:** Cấu hình trong `db_connect.php`, cho phép lấy ảnh từ nhiều thư mục gốc khác nhau.
-*   **Đường dẫn có tiền tố nguồn:** Định dạng `source_key/relative/path/to/item` (ví dụ: `main/album1`, `extra_drive/photos/2024/img.jpg`). Được sử dụng làm định danh trong API, DB, và điều hướng URL frontend (`#?folder=...`).
-*   **Xác thực đường dẫn:** `api.php` sử dụng `validate_source_and_path` / `validate_source_and_file_path` để đảm bảo mọi truy cập tệp/thư mục đều hợp lệ và nằm trong nguồn được phép.
-*   **Bảo vệ thư mục:** Mật khẩu được hash và lưu trong `folder_passwords` (key là đường dẫn có tiền tố). `check_folder_access` kiểm tra session hoặc DB. `js/app.js` hiển thị prompt và gọi action `authenticate` để xác thực.
-*   **Thumbnail:** Được tạo "on-the-fly" bởi action `get_thumbnail` nếu chưa có trong cache. Cache được lưu trong `cache/thumbnails/<size>/<md5_hash_of_source_prefixed_path>.jpg`.
-*   **Quản trị:** Yêu cầu đăng nhập (`login.php`). Trang admin (`admin.php` + `js/admin.js`) cho phép quản lý mật khẩu thư mục và xem thống kê lượt xem/tải.
+*   **Đa nguồn ảnh:** Cho phép định nghĩa nhiều thư mục gốc chứa ảnh trong `config.php`.
+*   **Đường dẫn có tiền tố nguồn:** Định dạng `source_key/relative/path` (ví dụ: `main/album1`, `extra_drive/photos/img.jpg`) được dùng làm định danh nhất quán trong toàn bộ ứng dụng (API, DB, URL hash).
+*   **Xác thực đường dẫn:** API luôn kiểm tra tính hợp lệ và giới hạn truy cập trong các nguồn được định nghĩa để chống path traversal.
+*   **Bảo vệ thư mục:** Mật khẩu hash lưu trong DB. `check_folder_access` kiểm tra quyền dựa trên session/DB. Frontend hiển thị prompt khi cần.
+*   **Thumbnail:** Mặc định tạo "on-the-fly" và cache lại. (Xem đề xuất tối ưu ở mục 6).
+*   **Quản trị:** Truy cập trang admin sau khi đăng nhập để quản lý mật khẩu và xem thống kê cơ bản.
 
-## 5. Trạng thái hiện tại & Ghi chú
+## 5. Tình trạng Hiện tại
 
-*   **Dọn dẹp code & Cấu trúc:**
-    *   Đã xóa các action API cũ/sai.
-    *   Đã tập trung các cài đặt vào `config.php`.
-    *   Đã refactor CSS cho modal/overlay sử dụng class chung `.modal-overlay` và `.modal-box`.
-*   **Sửa lỗi & Cải thiện UX:**
-    *   Đã sửa lỗi logic kiểm tra thành công trong `js/app.js` khi xác thực mật khẩu thư mục (sử dụng `authenticate` và kiểm tra `result.data.success`).
-    *   Đã cập nhật API (`check_folder_access`, `list_files`) và Frontend (`js/app.js`) để hiển thị biểu tượng khóa đóng 🔒 (cần mật khẩu) hoặc khóa mở 🔓 (đã xác thực trong session) cho các thư mục được bảo vệ.
-    *   Đã sửa logic điều hướng để chỉ yêu cầu mật khẩu khi cần thiết.
-    *   Đã ngăn chặn trình duyệt tự động điền mật khẩu vào ô prompt.
-    *   Đã tăng độ mờ nền của ô prompt mật khẩu.
-    *   Đã thêm phản hồi tiến trình tải ZIP và hiệu ứng làm mờ nền cho các lớp phủ.
-*   **Vấn đề bảo mật:** Mật khẩu admin (`admin_password_hash`) đã được chuyển vào `config.php`. Cần đảm bảo file này không bị đưa lên Git repository công khai nếu dự án được chia sẻ.
-*   **Môi trường:** User đang phát triển trên máy local (Windows/XAMPP), có thể có sự khác biệt về đường dẫn `IMAGE_SOURCES` so với môi trường production. File `db_connect.php` được thiết kế để xử lý việc này (bỏ qua nguồn không hợp lệ khi chạy).
-*   **Cần kiểm thử:** Code có vẻ hoạt động dựa trên phân tích, nhưng cần kiểm thử thực tế các chức năng (duyệt thư mục, xem ảnh, đặt/xóa mật khẩu, tải về, admin...). 
+*   Các chức năng cốt lõi (duyệt, xem ảnh, tìm kiếm, tải ZIP, bảo vệ mật khẩu) đã hoạt động.
+*   Đã thực hiện nhiều cải tiến về cấu trúc code (tập trung cấu hình, refactor modal CSS) và sửa lỗi giao diện/logic (hiển thị icon khóa, logic prompt mật khẩu, căn chỉnh, v.v.).
+*   Hiệu ứng làm mờ nền khi hiển thị modal đã được thêm.
+*   Đã thử nghiệm và hoàn nguyên về font chữ hệ thống mặc định.
+
+## 6. Các Cải tiến & Tối ưu Tiềm năng trong Tương lai
+
+*   **Tối ưu Hiệu suất (Ưu tiên cao):**
+    *   **Tạo Thumbnail trước:** Tạo sẵn thumbnail thay vì tạo động qua API.
+    *   **Tối ưu Tạo ZIP:** Sử dụng background job hoặc streaming.
+    *   **Tối ưu Liệt kê Ảnh (`list_files`):** Cache kích thước ảnh, cân nhắc phân trang phía server hiệu quả hơn.
+*   **Cải thiện UX/UI:**
+    *   **Hiệu ứng Skeleton Loading:** Thay thế text "Đang tải..." bằng hiệu ứng khung xương.
+    *   **Cải thiện Tìm kiếm:** Thêm gợi ý (autocomplete), làm nổi bật kết quả.
+    *   **Xử lý Lỗi Tốt hơn:** Hiển thị thông báo lỗi thân thiện hơn.
+    *   **Tinh chỉnh Font chữ:** Xem xét lại font web nếu cần.
+    *   **Kiểm tra Khả năng Tiếp cận (Accessibility - a11y):** Đảm bảo tuân thủ các tiêu chuẩn a11y.
+*   **Chất lượng Mã nguồn & Khả năng Bảo trì:**
+    *   **Biến CSS:** Sử dụng biến CSS cho màu sắc, font, khoảng cách.
+    *   **Modular hóa Code:** Chia nhỏ file CSS/JS khi dự án lớn hơn.
+    *   **Kiểm thử (Testing):** Thêm unit/integration test cho backend.
+*   **Tính năng Mới Tiềm năng:**
+    *   Sắp xếp/lọc album/ảnh.
+    *   Chế độ xem danh sách.
+    *   Chia sẻ/tải ảnh đơn lẻ.
+    *   Hiển thị metadata EXIF.
+    *   Mở rộng Trang Admin.
+
+## 7. Ghi chú & Cân nhắc Chung
+
+*   Tiếp tục tập trung vào nguyên tắc thiết kế **Mobile-First**.
+*   Đảm bảo tính nhất quán giữa môi trường phát triển (dev) và sản xuất (prod), đặc biệt về cấu hình đường dẫn trong `config.php`.
+*   Ưu tiên các **tối ưu về hiệu suất** vì chúng ảnh hưởng lớn đến trải nghiệm người dùng.
+*   Cần **kiểm thử kỹ lưỡng** tất cả chức năng sau các thay đổi. 

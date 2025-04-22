@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($config['app_title'] ?? 'Photo Gallery'); ?></title>
     <link rel="icon" type="image/png" href="theme/favicon.png"> <!-- Favicon -->
+
     <!-- Corrected PhotoSwipe 5 CSS CDN -->
     <link rel="stylesheet" href="https://unpkg.com/photoswipe@5/dist/photoswipe.css">
     <!-- Your custom styles -->
