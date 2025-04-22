@@ -115,13 +115,18 @@ button:disabled, .button:disabled {
 .directory-list-styling li {
     /* Các style cũ của li không cần nữa vì thẻ a chiếm hết */
 }
-.directory-list-styling li a { /* Thẻ a là card thư mục */
-    display: flex; align-items: center;
-    padding: 12px 14px;
-    background:#161b22; border:1px solid #30363d; border-radius:6px;
-    transition: background 0.2s, transform 0.15s, box-shadow 0.15s;
-    color: #c9d1d9; /* Màu chữ mặc định */
-    overflow: hidden; /* Tránh text tràn ra */
+.directory-list-styling li a {
+    display: flex; 
+    align-items: center; /* Keep vertical alignment */
+    background: #161b22; 
+    border: 1px solid #30363d; 
+    border-radius: 8px; 
+    padding: 14px; /* Reverted padding */
+    gap: 14px; /* Reverted gap */
+    transition: background-color 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+    color: #c9d1d9; 
+    overflow: hidden; /* Keep overflow on the 'a' tag for overall card shape */
+    text-decoration: none;
 }
 .directory-list-styling li a:hover {
     background:#21262d; transform:translateY(-2px);
@@ -132,11 +137,12 @@ button:disabled, .button:disabled {
 }
 
 .folder-thumbnail {
-    width: 56px; /* Giảm kích thước thumbnail */
-    height: 56px;
-    object-fit: cover; border-radius: 4px; /* Bo tròn ít hơn */
-    margin-right: 14px; background:#21262d;
-    border: 1px solid #30363d;
+    width: 80px; /* Keep increased size */
+    height: 80px; /* Keep increased size */
+    object-fit: cover; 
+    border-radius: 6px; 
+    background:#0d1117; 
+    border: 1px solid #21262d; 
     flex-shrink: 0;
 }
 /* CSS cho ảnh placeholder nếu cần */
@@ -310,15 +316,28 @@ img[src$=".svg"] { /* Nếu dùng SVG placeholder */
     display: none; /* Hidden by default */
     justify-content: center;
     align-items: center;
-    z-index: 1000; /* Ensure it's below admin header maybe? Check z-index needs */
+    z-index: 1000; 
     padding: 20px;
     box-sizing: border-box;
-}
-/* Make overlay visible when needed (JS will still control display:flex/none on specific ID) */
-.modal-overlay[style*="display: flex"] { /* Use attribute selector as JS sets inline style */
-     display: flex !important; /* Ensure visibility when JS sets it */
+    opacity: 0; /* Start hidden for transition */
+    visibility: hidden; /* Start hidden */
+    transition: opacity 0.25s ease-out, visibility 0.25s ease-out; /* Add transition */
 }
 
+/* Make overlay visible when JS adds the class */
+.modal-overlay.modal-visible {
+     /* display: flex !important; /* REMOVED this line */
+     display: flex; /* Let flexbox handle alignment */
+     opacity: 1; /* Fade in */
+     visibility: visible; /* Make visible */
+}
+
+/* REMOVE the old attribute selector rule */
+/*
+.modal-overlay[style*="display: flex"] { 
+     display: flex !important; 
+}
+*/
 
 /* --- Base Modal Box --- */
 .modal-box {
@@ -356,10 +375,11 @@ img[src$=".svg"] { /* Nếu dùng SVG placeholder */
 }
 
 /* Zip Progress Box (inherits from .modal-box) */
-.zip-progress-box p {
-    /* margin-bottom: 20px; Inherited or set via inline */
+.zip-progress-box p#zip-progress-message {
     font-size: 1em;
     line-height: 1.5;
+    margin-top: 15px;    /* Moved from inline style */
+    margin-bottom: 20px; /* Moved from inline style */
 }
 /* Spinner Styling */
 .zip-progress-box .spinner {
@@ -374,8 +394,10 @@ img[src$=".svg"] { /* Nếu dùng SVG placeholder */
 @keyframes spin { to { transform: rotate(360deg); } }
 /* Cancel Button */
 .zip-progress-box #cancel-zip-button {
-    background-color: #6c757d; border-color: #6c757d;
-    padding: 10px 20px; min-width: 110px;
+    background-color: #6c757d; /* Moved from inline style & match existing */
+    border-color: #6c757d;
+    padding: 10px 20px; 
+    min-width: 110px;
 }
 .zip-progress-box #cancel-zip-button:hover {
     background-color: #5a6268; border-color: #5a6268;
@@ -536,15 +558,15 @@ main.container {
 
 .directory-list-styling li a {
     display: flex; 
-    align-items: center; 
+    align-items: center; /* Keep vertical alignment */
     background: #161b22; 
     border: 1px solid #30363d; 
     border-radius: 8px; 
-    padding: 14px; /* Adjusted padding */
-    gap: 14px; /* Adjusted gap */
+    padding: 14px; /* Reverted padding */
+    gap: 14px; /* Reverted gap */
     transition: background-color 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s;
     color: #c9d1d9; 
-    overflow: hidden; 
+    overflow: hidden; /* Keep overflow on the 'a' tag for overall card shape */
     text-decoration: none;
 }
 
@@ -558,13 +580,12 @@ main.container {
 }
 
 .folder-thumbnail {
-    width: 50px; /* Adjusted size */
-    height: 50px;
+    width: 80px; /* Keep increased size */
+    height: 80px; /* Keep increased size */
     object-fit: cover; 
     border-radius: 6px; 
-    /* margin-right: 12px; /* Removed, using gap now */
     background:#0d1117; 
-    border: 1px solid #21262d; /* Softer border */
+    border: 1px solid #21262d; 
     flex-shrink: 0;
 }
 
@@ -573,7 +594,8 @@ main.container {
     font-weight: 500;
     line-height: 1.4;
     white-space: normal;
-    overflow: hidden;
+    overflow: visible; /* Remove overflow hidden */
+    text-overflow: clip; /* Remove ellipsis */
     color: #e6edf3; /* Ensure consistent text color */
 }
 
@@ -598,6 +620,14 @@ main.container {
 }
 
 @media (max-width: 480px) {
+    #directory-list {
+        /* Add horizontal padding to prevent single-column cards from stretching edge-to-edge */
+        padding-left: 15px;
+        padding-right: 15px;
+        box-sizing: border-box; /* Ensure padding is included in width */
+        max-width: 100%; /* Ensure it doesn't exceed screen width with padding */
+    }
+
      #directory-view {
         gap: 30px; 
     }
@@ -617,12 +647,12 @@ main.container {
         gap: 15px;
     }
      .directory-list-styling li a {
-        padding: 14px 16px; /* Increased padding for better tap target */
-        gap: 12px;
+        padding: 14px 16px; /* Reverted mobile padding */
+        gap: 12px; /* Reverted mobile gap */
     }
     .folder-thumbnail {
-        width: 50px;
-        height: 50px;
+        width: 60px; /* Keep increased size for small screens */
+        height: 60px; /* Keep increased size for small screens */
     }
     .directory-list-styling span {
         font-size: 1em;
@@ -745,7 +775,7 @@ main.container {
     }
     .image-item { margin-bottom: 8px; }
     .folder-thumbnail { width: 40px; height: 40px; margin-right: 10px;}
-    .directory-list-styling li a { padding: 10px 12px; }
+    .directory-list-styling li a { padding: 14px 16px; }
     .directory-list-styling span { font-size: 0.95em; }
     .app-footer { font-size: 0.8em; }
      /* Force single column for directory list on very small screens */
@@ -1104,24 +1134,27 @@ main.container {
 .directory-item-content {
     display: flex; /* Use flex to align icon and text */
     align-items: center; /* Vertically align icon and text */
-    overflow: hidden; /* Prevent content from overflowing */
+    overflow: hidden; /* Prevent content from overflowing its container */
+    flex-grow: 1; /* Allow content wrapper to take available space */
 }
 
-/* Ensure the text span still handles overflow */
+/* Ensure the text span allows wrapping */
 .directory-item-content > span:last-child { /* Target the text span specifically */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-grow: 1; /* Allow text to take remaining space */
+    white-space: normal; /* Allow text to wrap */
+    overflow: visible; /* Remove overflow hidden */
+    text-overflow: clip; /* Remove ellipsis */
+    /* flex-grow: 1; /* Removed, let it size naturally */
+    line-height: 1.4; /* Ensure consistent line height for wrapping */
+    /* Optional: Add a max-width if needed, but wrapping should handle it */
 }
 
 .lock-icon {
-    font-size: 0.9em; /* Adjust icon size if needed */
-    flex-shrink: 0; /* Prevent icon from shrinking */
-    display: inline-block; /* Needed for width/height/margins */
-    min-width: 20px; /* Set minimum width for spacing (adjust as needed) */
-    text-align: center; /* Center the icon within its space */
-    margin-right: 6px; /* Add margin to create space AFTER the icon */
+    font-size: 0.9em; 
+    flex-shrink: 0; 
+    display: inline-block; 
+    min-width: 20px; 
+    text-align: center; 
+    margin-right: 6px; /* Keep margin for spacing */
 }
 
 /* Optional: Style locked/unlocked icons differently if desired */

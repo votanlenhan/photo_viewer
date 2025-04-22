@@ -81,7 +81,7 @@ function debounce(func, wait) {
     function showPasswordPrompt(folderName) {
     const overlay = document.getElementById('passwordPromptOverlay');
     overlay.innerHTML = `
-            <div class="password-prompt-box">
+            <div class="modal-box password-prompt-box">
         <h3>Nhập mật khẩu</h3>
         <p>Album "<strong>${folderName}</strong>" được bảo vệ. Vui lòng nhập mật khẩu:</p>
         <div id="promptError" class="error-message"></div>
@@ -91,8 +91,8 @@ function debounce(func, wait) {
           <button id="promptCancel" class="button" style="background:#6c757d;">Hủy</button>
                 </div>
             </div>`;
-    overlay.style.display = 'flex';
-    document.body.classList.add('body-blur'); // ADDED: Add blur class
+    overlay.classList.add('modal-visible');
+    document.body.classList.add('body-blur');
     const input = document.getElementById('promptInput');
     const ok    = document.getElementById('promptOk');
     const cancel= document.getElementById('promptCancel');
@@ -144,8 +144,8 @@ function debounce(func, wait) {
   }
   function hidePasswordPrompt() {
     const overlay = document.getElementById('passwordPromptOverlay');
-    overlay.style.display = 'none';
-    document.body.classList.remove('body-blur'); // ADDED: Remove blur class
+    overlay.classList.remove('modal-visible');
+    document.body.classList.remove('body-blur');
     overlay.innerHTML = '';
   }
   
@@ -232,6 +232,18 @@ function debounce(func, wait) {
         contentWrapper.appendChild(span);     // Add text span after icon span
 
         a.append(img, contentWrapper); // Append image and the content wrapper
+
+        // --- RE-ADD ONCLICK LOGIC --- 
+        // MODIFY onClick based on protected and authorized status
+        if (dir.protected && !dir.authorized) {
+            // Protected and not authorized -> Show prompt
+            a.onclick = e => { e.preventDefault(); showPasswordPrompt(dir.path); };
+        } else {
+             // Public or already authorized -> Navigate directly
+             a.onclick = e => { e.preventDefault(); navigateToFolder(dir.path); }; // Use dir.path for navigation
+        }
+        // --- END RE-ADDED ONCLICK LOGIC ---
+
         li.appendChild(a);
         listEl.appendChild(li);
     });
@@ -803,25 +815,21 @@ function debounce(func, wait) {
     // Start the app
     initializeApp(); // Call initialization first
 
-    // --- MODIFIED: Event Listener Setup for Header Actions (Share/Download/More) ---
+    // --- MODIFIED: Event Listener Setup for Header Actions (Share/Download) ---
     const imageView = document.getElementById('image-view');
-    const moreActionsButton = document.getElementById('more-actions-button');
-    const moreActionsMenu = document.getElementById('more-actions-menu');
-    const shareActionMenuButton = document.getElementById('shareActionMenu');
-    const downloadActionMenuButton = document.getElementById('downloadActionMenu');
-    // Zip overlay and cancel button (already declared in previous step, ensure they are accessible here)
+    // Removed variables for non-existent mobile menu elements
     const overlay = document.getElementById('zip-progress-overlay'); 
     const cancelButton = document.getElementById('cancel-zip-button'); 
 
     // Function to get current folder info (used by multiple handlers)
     function getCurrentFolderInfo() {
-        const path = currentFolder; // Assume global 'currentFolder' holds the path
+        const path = currentFolder;
         const nameElement = document.getElementById('current-directory-name');
-        const name = nameElement ? nameElement.textContent.replace('Album: ', '').trim() : path.split('/').pop(); // Get name from header or path
+        const name = nameElement ? nameElement.textContent.replace('Album: ', '').trim() : path.split('/').pop();
         return { path, name };
     }
 
-    // Delegated listener for original desktop buttons
+    // Delegated listener for original desktop buttons (Share/Download)
     if (imageView) {
         imageView.addEventListener('click', (event) => {
             const target = event.target;
@@ -831,7 +839,6 @@ function debounce(func, wait) {
                 event.preventDefault();
                 handleShareAction(folderInfo.path);
             }
-             // Note: Download link is an <a> tag, not a button
             else if (target && target.id === 'download-all-link') {
                 event.preventDefault(); 
                 handleDownloadZipAction(folderInfo.path, folderInfo.name);
@@ -841,43 +848,7 @@ function debounce(func, wait) {
         console.error("Image view container not found for attaching action listeners.");
     }
 
-    // Listener for "More" button (mobile)
-    if (moreActionsButton) {
-        moreActionsButton.addEventListener('click', (event) => {
-            event.stopPropagation(); // Prevent click from immediately closing menu via document listener
-            if (moreActionsMenu) {
-                moreActionsMenu.classList.toggle('menu-visible');
-            }
-        });
-    } else {
-        console.error("More actions button not found.");
-    }
-
-    // Listeners for menu items (mobile)
-    if (shareActionMenuButton) {
-        shareActionMenuButton.addEventListener('click', () => {
-             const folderInfo = getCurrentFolderInfo();
-             handleShareAction(folderInfo.path);
-             // handleShareAction already hides menu
-        });
-    }
-    if (downloadActionMenuButton) {
-         downloadActionMenuButton.addEventListener('click', () => {
-             const folderInfo = getCurrentFolderInfo();
-             handleDownloadZipAction(folderInfo.path, folderInfo.name);
-              // handleDownloadZipAction already hides menu
-         });
-    }
-
-    // Listener to close menu when clicking outside
-    document.addEventListener('click', (event) => {
-        if (moreActionsMenu && moreActionsMenu.classList.contains('menu-visible')) {
-            // Check if the click was outside the menu AND outside the button that opens it
-            if (!moreActionsMenu.contains(event.target) && !moreActionsButton.contains(event.target)) {
-                moreActionsMenu.classList.remove('menu-visible');
-            }
-        }
-    });
+    // Removed listeners related to the non-existent mobile dropdown menu
 
     // --- Existing Zip Cancel Listeners (Keep them) ---
     if (cancelButton) {
@@ -890,16 +861,11 @@ function debounce(func, wait) {
     }
     if (overlay) {
         document.addEventListener('keydown', (e) => {
-            if (overlay.style.display !== 'none' && e.key === 'Escape') {
+            if (overlay.classList.contains('modal-visible') && e.key === 'Escape') { // Check class instead of style
                 console.log("ZIP download preparation cancelled via Escape key.");
                 hideZipFeedback();
-                 // Also hide the actions menu if Escape is pressed while zip overlay is shown
-                 if (moreActionsMenu) moreActionsMenu.classList.remove('menu-visible');
             }
-            // Also close actions menu on Escape even if zip overlay isn't shown
-            else if (moreActionsMenu && moreActionsMenu.classList.contains('menu-visible') && e.key === 'Escape'){
-                 moreActionsMenu.classList.remove('menu-visible');
-            }
+            // Removed check for non-existent mobile menu on Escape key
         });
     }
     // --- End Listener Setup ---
@@ -920,9 +886,9 @@ function showZipFeedback(folderName) {
     if (!overlay || !messageEl) return;
 
     messageEl.textContent = `Đang chuẩn bị file ZIP cho thư mục "${folderName}", vui lòng chờ...`;
-    overlay.style.display = 'flex'; // Use flex to center content
-    document.body.style.overflow = 'hidden'; // Disable body scroll
-    document.body.classList.add('body-blur'); // ADDED: Add blur class
+    overlay.classList.add('modal-visible');
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('body-blur');
 
     // Auto-hide feedback after a while (e.g., 45 seconds)
     clearTimeout(zipResetFeedbackTimerId); // Clear previous timer if any
@@ -936,9 +902,9 @@ function hideZipFeedback() {
     clearTimeout(zipDownloadTimerId); // Stop the download from starting if it hasn't yet
     clearTimeout(zipResetFeedbackTimerId); // Stop the auto-hide timer
 
-    overlay.style.display = 'none';
-    document.body.style.overflow = 'auto'; // Re-enable body scroll
-    document.body.classList.remove('body-blur'); // ADDED: Remove blur class
+    overlay.classList.remove('modal-visible');
+    document.body.style.overflow = 'auto';
+    document.body.classList.remove('body-blur');
 
     // Optional: Re-enable the download button if you disabled it
     // const downloadButton = document.getElementById('download-all-link');
