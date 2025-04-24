@@ -582,6 +582,8 @@ function debounce(func, wait) {
             } else {
                  console.log("Load More: Received 0 images, likely reached the end.");
                  // No need to decrement currentPage here
+                 // ADDED: Hide the button immediately when no new images are received
+                 document.getElementById('load-more-container').style.display = 'none';
             }
         } else {
             console.error("Error loading more images:", res.message);
@@ -600,8 +602,6 @@ function debounce(func, wait) {
     if (currentImageList.length >= totalImages) {
         console.log("Load More: All images loaded. Hiding button. Current:", currentImageList.length, "Total:", totalImages);
         document.getElementById('load-more-container').style.display = 'none';
-    } else {
-         document.getElementById('load-more-container').style.display = 'block'; // Ensure it's visible if more exist
     }
   }
 
