@@ -26,8 +26,11 @@
     *   `admin.php`: Trang quản lý mật khẩu thư mục và xem thống kê.
     *   `js/admin.js`: Logic phía client cho trang admin.
 *   **API (Backend):**
-    *   `api.php`: Điểm cuối xử lý các yêu cầu từ frontend (liệt kê file, xác thực, tạo ZIP, lấy ảnh/thumbnail, các action admin).
-    *   **Hàm helper quan trọng:** `validate_source_and_path()`, `validate_source_and_file_path()`, `check_folder_access()`, `create_thumbnail()`.
+    *   `api.php`: **Điểm vào chính (Entry Point)** cho tất cả các yêu cầu API. Chỉ chứa logic `require` các file xử lý khác.
+    *   `api/init.php`: Khởi tạo cấu hình lỗi, session, gọi `db_connect.php`, định nghĩa hằng số và biến API toàn cục.
+    *   `api/helpers.php`: Chứa các hàm hỗ trợ chung (ví dụ: `json_response()`, `validate_source_and_path()`, `check_folder_access()`, `create_thumbnail()`, `find_first_image_in_source()`).
+    *   `api/actions_public.php`: Xử lý các action công khai (ví dụ: `list_files`, `get_thumbnail`, `get_image`, `download_zip`, `authenticate`).
+    *   `api/actions_admin.php`: Xử lý các action yêu cầu quyền admin (ví dụ: `admin_login`, `admin_logout`, `admin_list_folders`, `admin_set_password`, `admin_remove_password`).
 *   **Cấu hình & Dữ liệu:**
     *   `config.php`: **File cấu hình trung tâm** (thông tin DB, admin, nguồn ảnh, cài đặt cache, giới hạn API, log, tiêu đề). **QUAN TRỌNG:** Không đưa file này lên repo công khai nếu chứa thông tin nhạy cảm.
     *   `db_connect.php`: **File thiết lập cốt lõi.** `require` file `config.php`, kết nối DB, xác thực và định nghĩa nguồn ảnh (`IMAGE_SOURCES`), định nghĩa hằng số cache/extensions, tự động tạo bảng DB.
@@ -52,9 +55,11 @@
 ## 5. Tình trạng Hiện tại
 
 *   Các chức năng cốt lõi (duyệt, xem ảnh, tìm kiếm, tải ZIP, bảo vệ mật khẩu) đã hoạt động.
-*   Đã thực hiện nhiều cải tiến về cấu trúc code (tập trung cấu hình, refactor modal CSS) và sửa lỗi giao diện/logic (hiển thị icon khóa, logic prompt mật khẩu, căn chỉnh, v.v.).
+*   **API backend (`api.php`) đã được refactor thành cấu trúc module rõ ràng hơn trong thư mục `api/` để dễ bảo trì.**
+*   Đã thực hiện nhiều cải tiến về cấu trúc code frontend (tập trung cấu hình, refactor modal CSS) và sửa lỗi giao diện/logic (hiển thị icon khóa, logic prompt mật khẩu, căn chỉnh, v.v.).
 *   Hiệu ứng làm mờ nền khi hiển thị modal đã được thêm.
 *   Đã thử nghiệm và hoàn nguyên về font chữ hệ thống mặc định.
+*   **Đã sửa lỗi hiển thị thumbnail cho thư mục con.**
 
 ## 6. Các Cải tiến & Tối ưu Tiềm năng trong Tương lai
 
