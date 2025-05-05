@@ -61,9 +61,12 @@
 *   Đã thử nghiệm và hoàn nguyên về font chữ hệ thống mặc định.
 *   **Đã sửa lỗi hiển thị thumbnail cho thư mục con.**
 *   **Đã khắc phục lỗi thông báo "Đang tạo ZIP" không tự ẩn và lỗi "Bad Request"/"Unexpected token" khi tải ZIP.**
-*   **Đã sửa lỗi cú pháp JavaScript trong `js/admin.js` (thiếu dấu ngoặc đơn, lỗi quote).**
-*   **Đã hoàn thiện logic và giao diện người dùng cho nút cache trong trang admin (`js/admin.js`).**
+*   **Đã sửa lỗi cú pháp JavaScript trong `js/admin.js`.**
 *   **Đã thêm tiêu đề cột 'Cache' còn thiếu vào bảng trong trang admin (`admin.php`).**
+*   **Đã sửa logic tạo đường dẫn cache thumbnail để đảm bảo lưu vào thư mục con theo kích thước (ví dụ: `cache/thumbnails/150/`, `cache/thumbnails/750/`).**
+*   **Đã triển khai cơ chế tạo cache bất đồng bộ bằng hàng đợi công việc (DB table `cache_jobs` và script `worker_cache.php`) để tránh chặn người dùng khi admin tạo cache.**
+*   **Đã cấu hình worker cache chỉ tạo trước thumbnail kích thước lớn nhất (ví dụ: 750px), thumbnail nhỏ (150px) vẫn được tạo on-the-fly.**
+*   **Đã thêm cơ chế tự động làm mới danh sách thư mục trên trang admin để cập nhật trạng thái nút cache sau khi worker xử lý xong.**
 
 ## 6. Các Cải tiến & Tối ưu Tiềm năng trong Tương lai
 

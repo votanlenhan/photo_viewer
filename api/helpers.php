@@ -379,7 +379,7 @@ function create_thumbnail($source_path, $cache_path, $thumb_size = 150)
             error_log("[create_thumbnail] Source image not readable: {$source_path}");
             return false;
         }
-        $image_info = @getimagesize($source_path);
+        $image_info = getimagesize($source_path);
         if ($image_info === false) {
             error_log("[create_thumbnail] Failed to get image size for: {$source_path}");
             return false;
@@ -389,12 +389,12 @@ function create_thumbnail($source_path, $cache_path, $thumb_size = 150)
 
         $source_image = null;
         switch ($mime) {
-            case 'image/jpeg': $source_image = @imagecreatefromjpeg($source_path); break;
-            case 'image/png': $source_image = @imagecreatefrompng($source_path); break;
-            case 'image/gif': $source_image = @imagecreatefromgif($source_path); break;
+            case 'image/jpeg': $source_image = imagecreatefromjpeg($source_path); break;
+            case 'image/png': $source_image = imagecreatefrompng($source_path); break;
+            case 'image/gif': $source_image = imagecreatefromgif($source_path); break;
             case 'image/webp':
                 if (function_exists('imagecreatefromwebp')) {
-                    $source_image = @imagecreatefromwebp($source_path);
+                    $source_image = imagecreatefromwebp($source_path);
                 } else {
                     error_log("[create_thumbnail] WebP not supported by GD: {$source_path}"); return false;
                 }
@@ -442,7 +442,7 @@ function create_thumbnail($source_path, $cache_path, $thumb_size = 150)
         // Ensure cache directory exists
         $cache_dir = dirname($cache_path);
         if (!is_dir($cache_dir)) {
-            if (!@mkdir($cache_dir, 0775, true)) {
+            if (!mkdir($cache_dir, 0775, true)) {
                 error_log("[create_thumbnail] Failed to create cache directory: {$cache_dir}");
                 imagedestroy($source_image); imagedestroy($thumb_image); return false;
             }
@@ -456,7 +456,7 @@ function create_thumbnail($source_path, $cache_path, $thumb_size = 150)
 
         if (!$save_success) {
             error_log("[create_thumbnail] Failed to save thumbnail to: {$cache_path}");
-            if (file_exists($cache_path)) @unlink($cache_path); // Clean up failed attempt
+            if (file_exists($cache_path)) unlink($cache_path); // Clean up failed attempt
             return false;
         }
 
@@ -467,7 +467,7 @@ function create_thumbnail($source_path, $cache_path, $thumb_size = 150)
         error_log("[create_thumbnail] Exception for {$source_path} -> {$cache_path} : " . $e->getMessage());
         if (isset($source_image) && is_resource($source_image)) imagedestroy($source_image);
         if (isset($thumb_image) && is_resource($thumb_image)) imagedestroy($thumb_image);
-        if (file_exists($cache_path)) @unlink($cache_path);
+        if (file_exists($cache_path)) unlink($cache_path); // Clean up failed attempt if exception occurs
         return false;
     }
 }

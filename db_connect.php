@@ -156,6 +156,11 @@ try {
         // Create folder_passwords table
         $pdo->exec("CREATE TABLE IF NOT EXISTS folder_passwords (\r\n            folder_name TEXT PRIMARY KEY,\r\n            password_hash TEXT NOT NULL\r\n        )");
 
+        // Create cache_jobs table (NEW)
+        $pdo->exec("CREATE TABLE IF NOT EXISTS cache_jobs (\r\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n            folder_path TEXT NOT NULL,\r\n            status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'processing', 'completed', 'failed'\r\n            created_at INTEGER NOT NULL,\r\n            processed_at INTEGER NULL,\r\n            completed_at INTEGER NULL,\r\n            result_message TEXT NULL\r\n        )");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cache_jobs_status_created ON cache_jobs (status, created_at)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cache_jobs_folder_path ON cache_jobs (folder_path)");
+
         // +++ Add last_cached_fully_at column if it doesn't exist (SQLite specific) +++
         try {
             // Check if column exists

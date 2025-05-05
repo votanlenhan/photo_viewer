@@ -171,13 +171,16 @@ document.addEventListener('DOMContentLoaded', () => {
                  let buttonTitle = '';
                  let initiallyDisabled = false;
                  
-                 if (folder.last_cached_fully_at) { 
-                    buttonText = 'Đã cache (Kiểm tra lại)';
-                    buttonTitle = 'Cache đã tạo lúc: ' + new Date(folder.last_cached_fully_at * 1000).toLocaleString() + '. Click để kiểm tra/cập nhật lại.';
+                 // Đổi tên biến để rõ ràng hơn, đây là cache cho ảnh lớn
+                 const lastLargeCacheTime = folder.last_cached_fully_at;
+                 
+                 if (lastLargeCacheTime) { 
+                    buttonText = 'Đã cache ảnh lớn';
+                    buttonTitle = 'Cache ảnh lớn đã tạo/kiểm tra lúc: ' + new Date(lastLargeCacheTime * 1000).toLocaleString() + '. Click để yêu cầu tạo/kiểm tra lại trong nền.';
                     // Nút vẫn enable để cho phép kiểm tra lại
                  } else {
-                    buttonText = 'Kiểm Tra Cache';
-                    buttonTitle = 'Kiểm tra và tạo cache thumbnail nếu cần.';
+                    buttonText = 'Tạo Cache Ảnh Lớn';
+                    buttonTitle = 'Yêu cầu tạo cache thumbnail kích thước lớn (để xem ảnh nhanh hơn) cho thư mục này trong nền.';
                  }
                  
                  cacheButton.textContent = buttonText;
@@ -319,114 +322,149 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleCacheFolder(button, folderPath) {
         console.log(`handleCacheFolder called for path: ${folderPath}`); // LOG 3
 
-        // Điều chỉnh confirm message tùy trạng thái ban đầu?
-        const isCheckingAgain = button.textContent.startsWith('Đã cache');
-        const confirmMessage = isCheckingAgain 
-            ? `Bạn có chắc muốn kiểm tra/cập nhật lại cache cho thư mục "${folderPath}"?`
-            : `Bạn có chắc muốn tạo/cập nhật cache thumbnail cho thư mục "${folderPath}"? Quá trình này có thể mất vài phút.`;
-
-        if (!confirm(confirmMessage)) {
-            console.log('Cache process cancelled by user.');
+        // Xác nhận trước khi gửi yêu cầu
+        if (!confirm(`Bạn có chắc muốn yêu cầu tạo/cập nhật cache cho thư mục "${folderPath}"? Quá trình này sẽ chạy trong nền.`)) {
+            console.log('Cache request cancelled by user.');
             return;
         }
         
-        const loadingText = isCheckingAgain ? 'Đang kiểm tra lại...' : 'Đang tạo cache...';
-        showLoading(loadingText);
-        const originalButtonText = isCheckingAgain ? 'Đã cache (Kiểm tra lại)' : 'Kiểm Tra Cache'; // Lưu lại text đúng
-        const originalButtonTitle = button.title; // Lưu title gốc
+        // Lưu trạng thái nút gốc để có thể khôi phục nếu API call ban đầu thất bại
+        const originalButtonText = button.textContent;
+        const originalButtonTitle = button.title;
+        
+        // Cập nhật giao diện ngay lập tức để phản hồi
         button.disabled = true;
-        button.textContent = loadingText;
+        button.textContent = 'Đang yêu cầu...';
+        // Không dùng showLoading toàn cục nữa vì API trả về nhanh
+        // showLoading('Đang gửi yêu cầu cache...'); 
 
         try {
             const formData = new FormData();
             formData.append('action', 'admin_cache_folder');
             formData.append('path', folderPath);
 
-            const response = await fetchData('api.php', { method: 'POST', body: formData });
-            console.log('API response received:', response); // LOG 4
+            // Sử dụng fetch trực tiếp vì fetchData có thể không phù hợp với cấu trúc response mới hoàn toàn
+            const response = await fetch('api.php', { method: 'POST', body: formData });
+            const result = await response.json();
+            console.log('API response received:', result); // LOG 4 (result is the direct JSON data)
 
-            let finalButtonText = 'Kiểm Tra Cache'; // Default state, assume check needed or failed
-            let finalButtonTitle = 'Kiểm tra và tạo cache thumbnail nếu cần.'; // Default title
-            let feedbackType = 'error'; // Default feedback type
-            let feedbackMessage = 'Có lỗi xảy ra khi xử lý cache.'; // Default feedback message
+            // Ẩn loading nếu có
+             hideLoading(); 
 
-            if (response.status === 'success' && response.data?.success === true) {
-                const data = response.data;
-                console.log(`Checking conditions: errors=${data.errors}, created=${data.thumbnails_created}`); // LOG 5
-
-                if (data.errors === 0) {
-                    // Cache process successful (no errors)
-                    finalButtonText = 'Đã cache (Kiểm tra lại)';
-                    feedbackType = 'success';
-                    // Use server timestamp if available, otherwise indicate it's just cached
-                    const newTimestamp = data.updated_timestamp; // Rely on server providing this
-                    if (newTimestamp) {
-                         finalButtonTitle = 'Cache đã tạo/xác nhận lúc: ' + new Date(newTimestamp * 1000).toLocaleString() + '. Click để kiểm tra/cập nhật lại.';
-                    } else {
-                         finalButtonTitle = 'Cache đã được tạo/cập nhật. Click để kiểm tra/cập nhật lại.';
-                         console.warn("Server did not return 'updated_timestamp' on successful cache.");
-                    }
-
-                    // Tailor success message based on creation count
-                    if (data.thumbnails_created > 0) {
-                        feedbackMessage = `Cache cho '${folderPath}' hoàn tất: Đã tạo ${data.thumbnails_created} thumbnail mới.`;
-                    } else {
-                        feedbackMessage = `Cache cho '${folderPath}' đã được xác nhận là mới nhất.`;
-                    }
-                     // Append skipped/error count for more detail
-                     feedbackMessage += ` (${data.thumbnails_skipped} bỏ qua).`;
-
-                } else {
-                    // Errors occurred during thumbnail creation
-                    feedbackType = 'error';
-                     // Keep button text as 'Kiểm Tra Cache' to encourage retry
-                     feedbackMessage = `Lỗi tạo cache cho '${folderPath}': Có ${data.errors} lỗi xảy ra khi tạo thumbnail. Chi tiết xem log server. (${data.thumbnails_created} tạo, ${data.thumbnails_skipped} bỏ qua).`;
-                     finalButtonText = 'Lỗi Cache (Thử lại)'; // More indicative text
-                     finalButtonTitle = 'Đã xảy ra lỗi khi tạo cache. Click để thử lại.';
-                }
-
-            } else {
-                // API call failed or reported success: false
-                const errorMsg = response.data?.error || response.message || 'Lỗi không xác định từ API.';
-                feedbackMessage = `Lỗi xử lý cache cho '${folderPath}': ${errorMsg}`;
-                feedbackType = 'error';
-                finalButtonText = 'Lỗi API (Thử lại)'; // Indicate API level failure
-                finalButtonTitle = 'Lỗi giao tiếp với máy chủ. Click để thử lại.';
+            if (!response.ok || result.success !== true) {
+                // Lỗi từ API (bao gồm cả lỗi validation, server error khi enqueue)
+                throw new Error(result.error || result.message || `Lỗi HTTP ${response.status}`);
             }
 
-            showFeedback(feedbackMessage, feedbackType);
-            // Update button based on the final determined state
+            // Xử lý phản hồi thành công từ API (đã đưa vào hàng đợi hoặc đã có sẵn)
+            let feedbackType = 'info'; // Mặc định là info cho trạng thái chờ
+            let finalButtonText = 'Đang chờ xử lý';
+            let finalButtonTitle = 'Yêu cầu tạo cache đang chờ xử lý trong nền.';
+
+            if (result.status === 'already_queued') {
+                 feedbackType = 'warning';
+                 finalButtonText = 'Đang xử lý/chờ'; // Trạng thái nút nếu đã có job
+                 finalButtonTitle = 'Yêu cầu cache cho thư mục này đã có trong hàng đợi hoặc đang xử lý.';
+            } else if (result.status === 'queued') {
+                 feedbackType = 'success'; // Thành công đưa vào hàng đợi
+                 // Giữ nguyên finalButtonText và finalButtonTitle là 'Đang chờ xử lý'
+            }
+
+            // Hiển thị thông báo từ API
+            showFeedback(result.message || 'Yêu cầu đã được gửi.', feedbackType);
+
+            // Cập nhật nút với trạng thái mới (thường là 'Đang chờ xử lý')
+            // Nút vẫn bị disable để tránh gửi yêu cầu liên tục
             button.textContent = finalButtonText;
             button.title = finalButtonTitle;
+            button.disabled = true; // Giữ nút disable
+            console.log(`Button state set to: ${finalButtonText}`);
+
+            // LƯU Ý QUAN TRỌNG:
+            // Trạng thái nút sẽ chỉ cập nhật thành "Đã cache" khi:
+            // 1. Worker chạy nền hoàn thành công việc.
+            // 2. Dữ liệu được load lại (fetchAndRenderFolders) và API `admin_list_folders`
+            //    trả về giá trị `last_cached_fully_at` mới nhất cho thư mục này.
+            // Do đó, không cần cập nhật nút về trạng thái "Đã cache" ngay tại đây.
+            // Cân nhắc: Có thể reload lại danh sách sau một khoảng thời gian ngắn 
+            // để cập nhật trạng thái nút nếu worker xử lý nhanh?
+            // setTimeout(() => fetchAndRenderFolders(adminSearchInput.value.trim()), 5000); // Ví dụ: reload sau 5s
+
 
         } catch (error) {
-            // This catch block handles errors *outside* the fetchData promise (e.g., programming errors here)
-            // fetchData itself handles API/network errors and returns a structured error response.
-            console.error("Critical Error during handleCacheFolder logic:", error);
-            // Use showFeedback for consistency, indicating a critical internal error
-            showFeedback(`Lỗi client nghiêm trọng khi xử lý cache cho '${folderPath}': ${error.message}`, "error");
-             // Revert to a known state in case of unexpected errors in this block
+            // Lỗi xảy ra khi gọi API ban đầu (fetch thất bại, JSON parse lỗi, hoặc API trả về lỗi)
+            hideLoading(); 
+            console.error("Error requesting cache job:", error);
+            showFeedback(`Lỗi gửi yêu cầu cache: ${error.message}`, "error");
+            
+            // Khôi phục trạng thái nút về ban đầu nếu yêu cầu API thất bại
              button.textContent = originalButtonText;
              button.title = originalButtonTitle;
-        } finally {
-            // Always re-enable the button after processing
-            hideLoading();
-            button.disabled = false;
-            console.log('Finally block executed. Button enabled.');
+             button.disabled = false; // Cho phép thử lại
+        }
+        // Không có finally block vì button state được quản lý trong try/catch
+    }
+
+    // --- Search Input Listener --- 
+    let refreshIntervalId = null; // Biến lưu ID của interval
+    const REFRESH_INTERVAL_MS = 15000; // 15 giây
+
+    function startAutoRefresh() {
+        // Xóa interval cũ nếu có
+        if (refreshIntervalId) {
+            clearInterval(refreshIntervalId);
+        }
+        // Bắt đầu interval mới
+        refreshIntervalId = setInterval(() => {
+            // Chỉ refresh nếu người dùng không đang gõ tìm kiếm
+            // (debounce sẽ xử lý refresh khi ngừng gõ)
+             if (document.activeElement !== adminSearchInput) {
+                console.log('Auto-refreshing folder list...');
+                fetchAndRenderFolders(adminSearchInput.value.trim());
+             }
+        }, REFRESH_INTERVAL_MS);
+         console.log(`Auto-refresh started with interval ID: ${refreshIntervalId}`);
+    }
+
+    function stopAutoRefresh() {
+         if (refreshIntervalId) {
+            console.log(`Stopping auto-refresh interval ID: ${refreshIntervalId}`);
+            clearInterval(refreshIntervalId);
+            refreshIntervalId = null;
         }
     }
 
-    // --- Initial Load ---
-    fetchAndRenderFolders();
-
-    // --- Search Input Listener --- 
     if (adminSearchInput) {
         const debouncedSearch = debounce(() => {
-            fetchAndRenderFolders(adminSearchInput.value.trim());
-        }, 300); // 300ms delay
-        adminSearchInput.addEventListener('input', debouncedSearch);
+            console.log('Debounced search triggering fetch...');
+            stopAutoRefresh(); // Dừng refresh khi bắt đầu tìm kiếm
+            fetchAndRenderFolders(adminSearchInput.value.trim()).finally(() => {
+                 // Khởi động lại refresh sau khi tìm kiếm hoàn tất (hoặc sau debounce timeout)
+                 // Đảm bảo không start lại nếu đang gõ liên tục
+                 startAutoRefresh(); 
+            });
+        }, 500); // Tăng debounce lên 500ms
+
+        adminSearchInput.addEventListener('input', () => {
+             stopAutoRefresh(); // Dừng refresh ngay khi bắt đầu gõ
+             debouncedSearch(); // Kích hoạt debounce
+        });
+        
+         // Xử lý trường hợp xóa sạch ô tìm kiếm
+         adminSearchInput.addEventListener('search', () => {
+              if(adminSearchInput.value === '') {
+                   stopAutoRefresh();
+                   fetchAndRenderFolders('').finally(startAutoRefresh);
+              }
+         });
+
     } else {
         console.error("Admin search input not found!");
     }
+
+    // --- Initial Load and Start Refresh ---
+    fetchAndRenderFolders().finally(() => {
+         startAutoRefresh(); // Bắt đầu tự động refresh sau khi tải lần đầu
+    });
 
 }); // End DOMContentLoaded
