@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Global state for polling --- 
     const activePollers = {}; // Store interval IDs: { "folder/path": intervalId }
-    const POLLING_INTERVAL_MS = 4000; // Check every 4 seconds
+    const POLLING_INTERVAL_MS = 10000; // Increased: Check every 10 seconds
 
     // --- Utility Functions ---
     function escapeHTML(str) {
