@@ -103,8 +103,17 @@ function validate_source_and_path($source_prefixed_path)
         strpos($real_target_path, $source_base_path . DIRECTORY_SEPARATOR) !== 0 && $real_target_path !== $source_base_path // Allow exact match for source root
     ) {
         // Log details for debugging
-        // ... (logging code omitted for brevity, same as original)
-        error_log("Path validation failed for directory: [Details Omitted]");
+        /* BỎ LOG CŨ
+        error_log(sprintf(
+            "[validate_source_and_path] Directory validation failed for '%s' (Source '%s'): real_target_path=%s, is_dir=%s, real_source_base=%s, check_base=%s",
+            $source_prefixed_path,
+            $source_key,
+            $real_target_path === false ? 'false' : $real_target_path,
+            is_dir($real_target_path) ? 'true' : 'false',
+            $source_base_path,
+            (strpos($real_target_path, $source_base_path . DIRECTORY_SEPARATOR) === 0 || $real_target_path === $source_base_path) ? 'true' : 'false'
+        ));
+        */
         return null;
     }
 
@@ -187,8 +196,18 @@ function validate_source_and_file_path($source_prefixed_path)
         strpos($real_target_path, $source_base_path . DIRECTORY_SEPARATOR) !== 0
     ) {
         // Log details for debugging
-        // ... (logging code omitted for brevity, same as original)
-        error_log("File validation failed: [Details Omitted]");
+        /* BỎ LOG CŨ
+        error_log(sprintf(
+            "[validate_source_and_file_path] File validation failed for '%s' (Source '%s'): real_target_path=%s, is_file=%s, is_readable=%s, real_source_base=%s, check_base=%s",
+            $source_prefixed_path,
+            $source_key,
+            $real_target_path === false ? 'false' : $real_target_path,
+            is_file($real_target_path) ? 'true' : 'false',
+            is_readable($real_target_path) ? 'true' : 'false',
+            $source_base_path,
+            (strpos($real_target_path, $source_base_path . DIRECTORY_SEPARATOR) === 0) ? 'true' : 'false'
+        ));
+        */
         return null;
     }
 

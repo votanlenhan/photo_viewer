@@ -363,15 +363,18 @@ switch ($action) {
         break;
 
     case 'download_zip':
+        // error_log("--- Reached download_zip action ---"); // <<< XÓA LOG
+        $folder_to_zip = $_GET['path'] ?? null;
+        // error_log("download_zip: Received path parameter: " . print_r($folder_to_zip, true)); // <<< XÓA LOG
+
+        if ($folder_to_zip === null) {
+            json_error('Thiếu tham số đường dẫn thư mục (path).', 400);
+        }
+
         @ini_set('max_execution_time', '300'); // 5 minutes
         @ini_set('memory_limit', '1024M');    // 1 GB (consider user feedback if this is too low/high)
 
-        $dir_param = $_GET['dir'] ?? null;
-        if ($dir_param === null) {
-            http_response_code(400); die("Lỗi: Thiếu tham số thư mục (dir).");
-        }
-
-        $path_info = validate_source_and_path($dir_param);
+        $path_info = validate_source_and_path($folder_to_zip);
         if ($path_info === null || $path_info['is_root']) {
              http_response_code(400); die("Lỗi: Đường dẫn thư mục không hợp lệ hoặc không thể tải thư mục gốc.");
         }

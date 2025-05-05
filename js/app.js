@@ -19,7 +19,6 @@ const imagesPerPage = 50;
 const initialLoadLimit = 5; // How many images to load super fast
 const standardLoadLimit = 50; // How many images per page (including subsequent 'load more')
 let zipDownloadTimerId = null; // ADDED: Timer ID for starting zip download
-let zipResetFeedbackTimerId = null; // ADDED: Timer ID for auto-hiding zip feedback
 
 // ========================================
 // === FUNCTION DECLARATIONS             ===
@@ -456,7 +455,7 @@ function debounce(func, wait) {
     }
     
     // Update ZIP link and Share button (can do this after phase 1)
-    zipLink.href = `api.php?action=download_zip&dir=${encodeURIComponent(folderPath)}`;
+    zipLink.href = `api.php?action=download_zip&path=${encodeURIComponent(folderPath)}`;
     shareBtn.onclick = () => {
         const shareUrl = `${location.origin}${location.pathname}#?folder=${encodeURIComponent(folderPath)}`;
         navigator.clipboard.writeText(shareUrl).then(() => {
@@ -877,7 +876,7 @@ function debounce(func, wait) {
 // =======================================
 
 function getZipDownloadUrl(folderPath) {
-    return `api.php?action=download_zip&dir=${encodeURIComponent(folderPath)}`;
+    return `api.php?action=download_zip&path=${encodeURIComponent(folderPath)}`;
 }
 
 function showZipFeedback(folderName) {
@@ -889,10 +888,6 @@ function showZipFeedback(folderName) {
     overlay.classList.add('modal-visible');
     document.body.style.overflow = 'hidden';
     document.body.classList.add('body-blur');
-
-    // Auto-hide feedback after a while (e.g., 45 seconds)
-    clearTimeout(zipResetFeedbackTimerId); // Clear previous timer if any
-    zipResetFeedbackTimerId = setTimeout(hideZipFeedback, 45000);
 }
 
 function hideZipFeedback() {
@@ -900,15 +895,10 @@ function hideZipFeedback() {
     if (!overlay) return;
 
     clearTimeout(zipDownloadTimerId); // Stop the download from starting if it hasn't yet
-    clearTimeout(zipResetFeedbackTimerId); // Stop the auto-hide timer
 
     overlay.classList.remove('modal-visible');
     document.body.style.overflow = 'auto';
     document.body.classList.remove('body-blur');
-
-    // Optional: Re-enable the download button if you disabled it
-    // const downloadButton = document.getElementById('download-all-link');
-    // if (downloadButton) downloadButton.disabled = false;
 }
 
 // =======================================
@@ -944,23 +934,29 @@ function handleShareAction(folderPath) {
 }
 
 function handleDownloadZipAction(folderPath, folderName) {
+    console.log('handleDownloadZipAction - folderPath:', folderPath);
     if (!folderPath) {
         alert('Lỗi: Không thể xác định thư mục hiện tại để tải về.');
         return;
     }
 
+    // Vẫn hiển thị phản hồi "Đang chuẩn bị..." ngắn gọn
     showZipFeedback(folderName);
 
-    // Schedule the actual download start after a short delay
-    clearTimeout(zipDownloadTimerId); // Clear previous timer
-    zipDownloadTimerId = setTimeout(() => {
-        console.log("Starting ZIP download for:", folderPath);
-        window.location.href = getZipDownloadUrl(folderPath);
-        // Feedback stays visible until cancelled or timeout
-    }, 150); // 150ms delay
+    // Lấy URL tải ZIP
+    const downloadUrl = getZipDownloadUrl(folderPath);
+    console.log("Directly navigating to ZIP URL:", downloadUrl);
 
-    // Hide menu if open
-    const menu = document.getElementById('more-actions-menu');
-    if (menu) menu.classList.remove('menu-visible');
+    // *** ĐIỀU HƯỚNG TRỰC TIẾP ĐỂ BẮT ĐẦU TẢI ***
+    window.location.href = downloadUrl;
+
+    // *** ẨN PHẢN HỒI SAU MỘT KHOẢNG TRÌ HOÃN NGẮN ***
+    // Vì chúng ta không biết chính xác khi nào tải bắt đầu hoặc kết thúc,
+    // ẩn phản hồi sau vài giây để tránh nó bị kẹt lại.
+    // Xóa timer cũ nếu có
+    clearTimeout(zipDownloadTimerId);
+    zipDownloadTimerId = setTimeout(() => {
+        hideZipFeedback();
+    }, 5000); // Ẩn sau 5 giây (có thể điều chỉnh)
 }
   

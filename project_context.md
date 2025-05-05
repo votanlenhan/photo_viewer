@@ -60,6 +60,7 @@
 *   Hiệu ứng làm mờ nền khi hiển thị modal đã được thêm.
 *   Đã thử nghiệm và hoàn nguyên về font chữ hệ thống mặc định.
 *   **Đã sửa lỗi hiển thị thumbnail cho thư mục con.**
+*   **Đã khắc phục lỗi thông báo "Đang tạo ZIP" không tự ẩn và lỗi "Bad Request"/"Unexpected token" khi tải ZIP.**
 
 ## 6. Các Cải tiến & Tối ưu Tiềm năng trong Tương lai
 

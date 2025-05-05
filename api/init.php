@@ -1,6 +1,8 @@
 <?php
 // api/init.php
 
+error_log('--- PHP LOGGING TEST FROM init.php ---');
+
 // Start output buffering at the very beginning of the API request lifecycle
 ob_start();
 
@@ -8,7 +10,9 @@ ob_start();
 ini_set('display_errors', 0); // Turn off displaying errors
 ini_set('display_startup_errors', 0);
 ini_set('log_errors', 1); // Enable logging errors
-ini_set('error_log', __DIR__ . '/../logs/php-error.log'); // Log to logs/php-error.log relative to init.php
+// Determine log path dynamically (adjust if needed)
+$log_path = dirname(__DIR__) . '/logs/php_error.log';
+ini_set('error_log', $log_path);
 error_reporting(E_ALL); // Report all errors
 
 // --- Session Start & JSON Header (with robust error handling) ---
