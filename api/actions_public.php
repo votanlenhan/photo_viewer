@@ -255,76 +255,115 @@ switch ($action) {
 
     case 'get_thumbnail':
         $image_path_param = $_GET['path'] ?? null;
-        $size = isset($_GET['size']) ? (int)$_GET['size'] : 150; // Default size
+        $size_param = isset($_GET['size']) ? (int)$_GET['size'] : 150;
 
         if (!$image_path_param) {
-            http_response_code(400);
-            // Output a placeholder or small error image?
-            // For now, just exit.
-            exit;
+            json_error('Thiếu đường dẫn ảnh.', 400);
         }
 
-        // Ensure requested size is valid (from API config)
-        if (!in_array($size, THUMBNAIL_SIZES_API, true)) {
-             $size = THUMBNAIL_SIZES_API[0]; // Use the smallest default if requested size is invalid
+        // Validate the IMAGE file path
+        $image_path_info = validate_source_and_file_path($image_path_param);
+        if ($image_path_info === null) {
+            json_error('Đường dẫn ảnh không hợp lệ.', 404);
         }
 
-        $file_info = validate_source_and_file_path($image_path_param);
-        if (!$file_info) {
-            http_response_code(404);
-            // error_log("[GetThumb] File validation failed for: {$image_path_param}");
-            exit;
+        // *** REMOVED FOLDER ACCESS CHECK FOR THUMBNAILS ***
+        /*
+        // Check access for the PARENT FOLDER of the image
+        $parent_folder_path = dirname($image_path_info['source_prefixed_path']);
+        if ($parent_folder_path === '.' || $parent_folder_path === $image_path_info['source_key']) {
+            $parent_folder_path = $image_path_info['source_key']; // Handle top-level source folder
+        } 
+
+        $folder_access = check_folder_access($parent_folder_path);
+        if (!$folder_access['authorized']) {
+             json_error('Không có quyền truy cập thư mục chứa ảnh.', 403); // Use 403 for general forbidden
+             // Or potentially 401 if you want to trigger password prompt, but that might be confusing here
+             // json_error('Yêu cầu mật khẩu.', 401);
+        }
+        */
+        // *** END REMOVED CHECK ***
+
+        // Validate requested size against allowed sizes
+        $allowed_sizes = THUMBNAIL_SIZES_API; // Use API specific sizes if needed
+        if (!in_array($size_param, $allowed_sizes)) {
+            json_error("Kích thước thumbnail không hợp lệ: {$size_param}", 400);
         }
 
-        // Check access to the *containing folder*
-        $folder_path_prefixed = dirname($file_info['source_prefixed_path']);
-        // Handle case where image is directly in source root (e.g., main/image.jpg)
-        if ($folder_path_prefixed === $file_info['source_key']) {
-             $folder_path_prefixed = ''; // Represent root access check
-        }
-        $access = check_folder_access($folder_path_prefixed);
-        if (!$access['authorized']) {
-            http_response_code($access['password_required'] ? 401 : 403);
-            // error_log("[GetThumb] Access denied for folder '{$folder_path_prefixed}' containing: {$file_info['source_prefixed_path']}");
-            exit;
-        }
+        $source_image_absolute_path = $image_path_info['absolute_path'];
+        $source_image_prefixed_path = $image_path_info['source_prefixed_path'];
 
-        $source_absolute_path = $file_info['absolute_path'];
-        $thumb_filename_safe = sha1($file_info['source_prefixed_path']) . '_' . $size . '.jpg'; // Use jpg extension for cached thumbs
-        // NEW: Construct path including size subdirectory
-        $cache_dir_for_size = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $size; // e.g., cache/thumbnails/150
-        $cache_absolute_path = $cache_dir_for_size . DIRECTORY_SEPARATOR . $thumb_filename_safe;
+        // Generate cache path
+        $cache_dir_for_size = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $size_param;
+        $thumb_filename = sha1($source_image_prefixed_path) . '_' . $size_param . '.jpg';
+        $cache_absolute_path = $cache_dir_for_size . DIRECTORY_SEPARATOR . $thumb_filename;
 
-        // Ensure the size-specific directory exists (create_thumbnail also does this, but good to be safe)
-        if (!is_dir($cache_dir_for_size)) {
-            @mkdir($cache_dir_for_size, 0775, true);
-        }
-
-        // Serve from cache if exists
+        // Check if cache exists and is recent enough (optional, remove if always regenerating)
         if (file_exists($cache_absolute_path)) {
-            // error_log("[GetThumb] Serving cached: {$cache_absolute_path}");
-            header('Content-Type: image/jpeg');
-            header('Cache-Control: public, max-age=2592000');
-            header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 2592000) . ' GMT');
+            // Cache hit - output cached file
+            // Send appropriate headers
+            header("Content-Type: image/jpeg");
+            header("Content-Length: " . filesize($cache_absolute_path));
+            // Cache control headers (adjust as needed)
+            header("Cache-Control: public, max-age=2592000"); // Cache for 30 days
+            header("Expires: " . gmdate("D, d M Y H:i:s", time() + 2592000) . " GMT");
+            header("Pragma: cache");
+
+            // Clear any output buffer before reading file
+             if (ob_get_level() > 0) ob_end_clean(); 
             readfile($cache_absolute_path);
             exit;
         }
 
-        // If not cached, create it
-        $created = create_thumbnail($source_absolute_path, $cache_absolute_path, $size);
+        // Cache miss - Create thumbnail on the fly
+        try {
+            if (!is_dir($cache_dir_for_size)) {
+                if (!@mkdir($cache_dir_for_size, 0775, true)) {
+                     error_log("Failed to create cache dir on-the-fly: {$cache_dir_for_size}");
+                     throw new Exception("Lỗi tạo thư mục cache.");
+                }
+            }
 
-        if ($created && file_exists($cache_absolute_path)) {
-            // error_log("[GetThumb] Created and serving: {$cache_absolute_path}");
-            header('Content-Type: image/jpeg');
-            header('Cache-Control: public, max-age=2592000');
-            header('Expires: ' . gmdate('D, d M Y H:i:s', time() + 2592000) . ' GMT');
-            readfile($cache_absolute_path);
-        } else {
-            error_log("[GetThumb] Failed to create/serve thumbnail for: {$file_info['source_prefixed_path']} (Cache: {$cache_absolute_path})");
-            http_response_code(500);
-            // Optionally serve a default placeholder image on failure
+            // Call create_thumbnail helper (it now throws Exception on failure)
+            if (create_thumbnail($source_image_absolute_path, $cache_absolute_path, $size_param)) {
+                // Successfully created - output the new file
+                header("Content-Type: image/jpeg");
+                header("Content-Length: " . filesize($cache_absolute_path));
+                header("Cache-Control: public, max-age=2592000");
+                header("Expires: " . gmdate("D, d M Y H:i:s", time() + 2592000) . " GMT");
+                header("Pragma: cache");
+
+                 if (ob_get_level() > 0) ob_end_clean();
+                readfile($cache_absolute_path);
+                exit;
+            } else {
+                 // Should not happen if create_thumbnail throws Exception, but as fallback
+                 throw new Exception('Hàm create_thumbnail trả về false không mong muốn.');
+            }
+        } catch (Exception $e) {
+            error_log("Error creating thumbnail on-the-fly for '{$source_image_prefixed_path}': " . $e->getMessage());
+            // Return a placeholder image or a 500 error
+            // Option 1: Return 500 Error (client can show broken image)
+             http_response_code(500);
+             // Clear buffer and echo simple text error (since we can't send JSON now)
+             if (ob_get_level() > 0) ob_end_clean(); 
+             header('Content-Type: text/plain');
+             echo "Lỗi tạo thumbnail: " . htmlspecialchars($e->getMessage());
+             exit;
+
+            // Option 2: Output a placeholder image (requires a placeholder file)
+            /*
+            $placeholder = 'path/to/placeholder.jpg';
+            if (file_exists($placeholder)) {
+                header("Content-Type: image/jpeg");
+                header("Content-Length: " . filesize($placeholder));
+                readfile($placeholder);
+            } else {
+                http_response_code(404); // Placeholder not found
+            }
+            exit;
+            */
         }
-        exit;
         break;
 
     case 'get_image': // Serve original image
