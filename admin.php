@@ -25,6 +25,7 @@ $admin_username = isset($_SESSION['admin_username']) ? htmlspecialchars($_SESSIO
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Quản lý Thư mục Ảnh</title>
+    <link rel="icon" type="image/png" href="theme/favicon.png"> <!-- Favicon -->
     <link rel="stylesheet" href="css/style.css"> 
 </head>
 <body>

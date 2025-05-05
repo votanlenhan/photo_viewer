@@ -54,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Đăng nhập Admin</title>
+    <link rel="icon" type="image/png" href="theme/favicon.png"> <!-- Favicon -->
     <link rel="stylesheet" href="css/style.css"> <style>
         /* CSS riêng cho trang login */
         html, body { height: 100%; } /* Đảm bảo body chiếm toàn bộ chiều cao */
