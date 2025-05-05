@@ -55,14 +55,16 @@ $admin_username = isset($_SESSION['admin_username']) ? htmlspecialchars($_SESSIO
                     <th>Lượt xem</th>
                     <th>Lượt tải ZIP</th>
                     <th>Link chia sẻ (Click để chọn)</th>
-                    <th>Hành động</th>
-                    <th>Cache</th>
+                    <th>Hành động Mật khẩu</th>
+                    <th>Trạng thái Cache</th>
+                    <th>Hành động Cache</th>
                 </tr>
             </thead>
             <tbody id="folder-list-body">
-                <tr><td colspan="6">Đang tải danh sách thư mục...</td></tr>
+                <tr><td colspan="8">Đang tải danh sách thư mục...</td></tr>
             </tbody>
         </table>
+
         <div id="admin-feedback" class="feedback-message" style="display: none;"></div>
         <div id="admin-loading" class="loading-indicator" style="display: none;">Đang tải...</div>
 

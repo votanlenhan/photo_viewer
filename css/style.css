@@ -1167,3 +1167,140 @@ main.container {
 /* Optional: Style locked/unlocked icons differently if desired */
 .lock-icon.locked { /* Styles for locked icon */ }
 .lock-icon.unlocked { /* Styles for unlocked icon */ }
+
+/* Cache Status Indicators */
+.admin-view table td:nth-last-child(2) div { /* Target the div inside the status cell */
+    font-size: 0.85em;
+    line-height: 1.3;
+    padding: 4px 0;
+    max-height: 70px; /* Limit max height (adjust as needed) */
+    overflow-y: auto; /* Add vertical scrollbar if content overflows */
+    display: block; /* Ensure div takes block layout for overflow */
+}
+.status-processing,
+.status-pending {
+    font-style: italic;
+    color: #a8a8a8;
+}
+.status-completed {
+    color: #3fb950; /* Green */
+}
+.status-failed {
+    color: #f85149; /* Red */
+}
+.status-warning {
+    color: #d29922; /* Yellow/Orange */
+    font-size: 0.9em;
+    margin-top: 3px;
+    display: block;
+}
+.status-never {
+     color: #888;
+}
+
+/* Base styles for admin table cells (Desktop first) */
+.admin-view th,
+.admin-view td {
+    padding: 12px 15px;
+    border: 1px solid #30363d;
+    text-align: left; /* Default align left for desktop */
+    vertical-align: middle;
+    color: #c9d1d9;
+}
+
+.admin-view td[data-label="Trạng thái Cache"] div {
+    /* Desktop: Ensure no mobile limits */
+    font-size: 0.85em;
+    line-height: 1.3;
+    padding: 4px 0;
+}
+
+/* Responsive Table Stacking for Admin */
+@media (max-width: 800px) { 
+    .admin-view table thead {
+        display: none; 
+    }
+    .admin-view table,
+    .admin-view table tbody,
+    .admin-view table tr,
+    .admin-view table td {
+        display: block; 
+        width: 100%;
+        text-align: right; /* Default align right for stacked cells */
+    }
+    .admin-view table tr {
+        margin-bottom: 15px; 
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        background-color: #161b22; 
+        overflow: hidden; 
+    }
+    .admin-view table td {
+        border: none;
+        border-bottom: 1px solid #21262d; 
+        padding: 10px 15px;
+        position: relative;
+        padding-left: 40%; 
+        min-height: 38px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end; /* Default align content right */
+    }
+    .admin-view table td:last-child {
+        border-bottom: none; 
+    }
+    .admin-view table td::before {
+        content: attr(data-label); 
+        position: absolute;
+        left: 15px;
+        width: 35%;
+        padding-right: 10px;
+        font-weight: 600;
+        color: #8b949e;
+        text-align: left; 
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Adjust specific cells that need left alignment or different layout */
+    .admin-view table td[data-label="Tên thư mục"] {
+        text-align: left; /* Align folder name left */
+        justify-content: flex-start;
+    }
+    .admin-view table td[data-label="Link chia sẻ"],
+    .admin-view table td[data-label="Hành động Mật khẩu"],
+    .admin-view table td[data-label="Hành động Cache"] {
+        padding-left: 15px; 
+        text-align: left; 
+        justify-content: flex-start; 
+    }
+    .admin-view table td[data-label="Hành động Mật khẩu"] .action-form {
+        flex-direction: column;
+        align-items: stretch; 
+        gap: 8px; 
+        width: 100%;
+    }
+    .admin-view table td[data-label="Hành động Mật khẩu"] .action-form input,
+    .admin-view table td[data-label="Hành động Mật khẩu"] .action-form button {
+        width: 100%; 
+        margin-bottom: 0;
+        min-width: auto; 
+        flex-basis: auto; 
+    }
+
+    /* Cache Status cell specific styles for mobile */
+    .admin-view table td[data-label="Trạng thái Cache"] div {
+        text-align: right; /* Align text inside div right */
+        width: auto; /* Let div size naturally */
+        max-height: none; /* No max-height */
+        overflow-y: visible; /* No scrollbar */
+    }
+    .admin-view table td[data-label="Trạng thái Cache"] .status-warning {
+         text-align: left; 
+     }
+     .admin-view table td[data-label="Hành động Cache"] button {
+         width: 100%; 
+     }
+
+}
