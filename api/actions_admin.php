@@ -274,8 +274,20 @@ switch ($action) {
 
                     foreach ($thumb_sizes_to_create as $size) {
                         $thumb_filename_safe = sha1($image_source_prefixed_path) . '_' . $size . '.jpg';
-                        $cache_path_relative = $source_key . '/' . $thumb_filename_safe;
-                        $cache_absolute_path = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $cache_path_relative;
+                        // NEW: Construct path including size subdirectory
+                        $cache_dir_for_size = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $size;
+                        $cache_absolute_path = $cache_dir_for_size . DIRECTORY_SEPARATOR . $thumb_filename_safe;
+
+                        // Ensure the size-specific directory exists
+                        if (!is_dir($cache_dir_for_size)) {
+                           if(!@mkdir($cache_dir_for_size, 0775, true)) {
+                                error_log("[Admin Cache] Failed to create cache subdir: {$cache_dir_for_size}");
+                                // Optionally count this as an error or skip this size?
+                                $error_count++;
+                                $cache_success = false;
+                                continue; // Skip to next size/file if dir creation fails
+                           }
+                        }
 
                         if (file_exists($cache_absolute_path)) {
                             $skipped_count++;

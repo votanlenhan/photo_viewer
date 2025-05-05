@@ -291,8 +291,14 @@ switch ($action) {
 
         $source_absolute_path = $file_info['absolute_path'];
         $thumb_filename_safe = sha1($file_info['source_prefixed_path']) . '_' . $size . '.jpg'; // Use jpg extension for cached thumbs
-        $cache_path_relative = $file_info['source_key'] . '/' . $thumb_filename_safe;
-        $cache_absolute_path = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $cache_path_relative;
+        // NEW: Construct path including size subdirectory
+        $cache_dir_for_size = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $size; // e.g., cache/thumbnails/150
+        $cache_absolute_path = $cache_dir_for_size . DIRECTORY_SEPARATOR . $thumb_filename_safe;
+
+        // Ensure the size-specific directory exists (create_thumbnail also does this, but good to be safe)
+        if (!is_dir($cache_dir_for_size)) {
+            @mkdir($cache_dir_for_size, 0775, true);
+        }
 
         // Serve from cache if exists
         if (file_exists($cache_absolute_path)) {
