@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Configuration ---
     const API_URL = 'api.php'; // API endpoint haha
 
+    // --- Global state for polling --- 
+    const activePollers = {}; // Store interval IDs: { "folder/path": intervalId }
+    const POLLING_INTERVAL_MS = 4000; // Check every 4 seconds
+
     // --- Utility Functions ---
     function escapeHTML(str) {
         if (typeof str !== 'string') return str;
@@ -75,6 +79,99 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Fetch API Error (admin):", e);
             // Return an error structure consistent with what the calling code expects
             return { status: 'error', message: e.message || 'Lỗi kết nối mạng.' }; 
+        }
+    }
+
+    // --- Function to Update Button State --- 
+    function updateCacheButtonState(button, folderPath, jobStatus, lastCachedAt) {
+        let buttonText = '';
+        let buttonTitle = '';
+        let isDisabled = false;
+        let icon = ''; // Optional icon
+
+        if (jobStatus === 'processing') {
+            buttonText = 'Đang xử lý...';
+            buttonTitle = 'Cache ảnh lớn đang được xử lý trong nền.';
+            isDisabled = true;
+            icon = '⚙️';
+        } else if (jobStatus === 'pending') {
+            buttonText = 'Đang chờ xử lý';
+            buttonTitle = 'Yêu cầu cache ảnh lớn đang chờ xử lý trong nền.';
+            isDisabled = true;
+            icon = '🕒';
+        } else { // Job is null (completed, failed, or never run)
+            if (lastCachedAt) {
+                buttonText = 'Đã cache ảnh lớn';
+                buttonTitle = 'Cache ảnh lớn đã tạo/kiểm tra lúc: ' + new Date(lastCachedAt * 1000).toLocaleString() + '. Click để yêu cầu tạo/kiểm tra lại trong nền.';
+                isDisabled = false;
+                icon = '✅';
+            } else {
+                buttonText = 'Tạo Cache Ảnh Lớn';
+                buttonTitle = 'Yêu cầu tạo cache thumbnail kích thước lớn cho thư mục này trong nền.';
+                isDisabled = false;
+                icon = '➕'; // Or maybe a warning if previous attempt failed?
+            }
+        }
+        
+        button.innerHTML = `${icon} ${buttonText}`.trim(); // Add icon
+        button.title = buttonTitle;
+        button.disabled = isDisabled;
+    }
+    
+    // --- Function to Poll Cache Status --- 
+    async function pollCacheStatus(button, folderPath) {
+        console.log(`[Polling ${folderPath}] Checking status...`);
+        try {
+            const apiUrl = `api.php?action=get_folder_cache_status&path=${encodeURIComponent(folderPath)}`;
+            const response = await fetch(apiUrl);
+            const result = await response.json();
+
+            if (!response.ok || result.success !== true) {
+                 console.warn(`[Polling ${folderPath}] Failed to get status:`, result.error || `HTTP ${response.status}`);
+                 // Optional: Stop polling on error? Or just keep trying?
+                 // stopPolling(folderPath); 
+                 return; // Keep previous button state on error
+            }
+            
+            const { job_status, last_cached_at } = result;
+            console.log(`[Polling ${folderPath}] Status: job=${job_status}, cached_at=${last_cached_at}`);
+
+            // Update button based on fetched status
+            updateCacheButtonState(button, folderPath, job_status, last_cached_at);
+
+            // Stop polling if the job is no longer pending or processing
+            if (job_status !== 'pending' && job_status !== 'processing') {
+                stopPolling(folderPath);
+            }
+
+        } catch (error) {
+             console.error(`[Polling ${folderPath}] Error:`, error);
+             // Optional: Stop polling on network error?
+             // stopPolling(folderPath);
+        }
+    }
+
+    // --- Function to Start Polling --- 
+    function startPolling(button, folderPath) {
+        // Clear existing poller for this path, if any
+        stopPolling(folderPath);
+        
+        console.log(`[Polling ${folderPath}] Starting poller.`);
+        // Initial immediate check
+        pollCacheStatus(button, folderPath); 
+        
+        // Start interval
+        activePollers[folderPath] = setInterval(() => {
+            pollCacheStatus(button, folderPath);
+        }, POLLING_INTERVAL_MS);
+    }
+
+    // --- Function to Stop Polling --- 
+    function stopPolling(folderPath) {
+        if (activePollers[folderPath]) {
+            console.log(`[Polling ${folderPath}] Stopping poller.`);
+            clearInterval(activePollers[folderPath]);
+            delete activePollers[folderPath];
         }
     }
 
@@ -164,36 +261,26 @@ document.addEventListener('DOMContentLoaded', () => {
                  shareInput.addEventListener('click', handleShareLinkClick);
             }
             
-            // +++ KIỂM TRA TRẠNG THÁI CACHE BAN ĐẦU VÀ TẠO NÚT +++
-            if (cacheButton) {
-                 const folderPath = form.dataset.folder; 
-                 let buttonText = '';
-                 let buttonTitle = '';
-                 let initiallyDisabled = false;
-                 
-                 // Đổi tên biến để rõ ràng hơn, đây là cache cho ảnh lớn
-                 const lastLargeCacheTime = folder.last_cached_fully_at;
-                 
-                 if (lastLargeCacheTime) { 
-                    buttonText = 'Đã cache ảnh lớn';
-                    buttonTitle = 'Cache ảnh lớn đã tạo/kiểm tra lúc: ' + new Date(lastLargeCacheTime * 1000).toLocaleString() + '. Click để yêu cầu tạo/kiểm tra lại trong nền.';
-                    // Nút vẫn enable để cho phép kiểm tra lại
-                 } else {
-                    buttonText = 'Tạo Cache Ảnh Lớn';
-                    buttonTitle = 'Yêu cầu tạo cache thumbnail kích thước lớn (để xem ảnh nhanh hơn) cho thư mục này trong nền.';
+            // *** INITIAL BUTTON STATE *** 
+            updateCacheButtonState(cacheButton, folder.path, folder.current_cache_job_status, folder.last_cached_fully_at);
+            
+            // *** CHECK IF WE NEED TO START POLLING (e.g., on page load if job was already running) ***
+            if (folder.current_cache_job_status === 'pending' || folder.current_cache_job_status === 'processing') {
+                 // If poller isn't already running for this path, start it
+                 if (!activePollers[folder.path]) {
+                     startPolling(cacheButton, folder.path);
                  }
-                 
-                 cacheButton.textContent = buttonText;
-                 cacheButton.title = buttonTitle;
-                 cacheButton.disabled = initiallyDisabled; // Thường là false
-                 
-                 // Luôn gán sự kiện onclick
-                 cacheButton.onclick = () => {
-                     console.log(`Cache button clicked for: ${folderPath}. Initial state: ${buttonText}`); 
-                     handleCacheFolder(cacheButton, folderPath);
-                 };
+            } else {
+                 // Ensure any old poller for this path is stopped if job is now complete/null
+                 stopPolling(folder.path);
             }
-            // +++ KẾT THÚC TẠO NÚT +++
+            
+            // *** ASSIGN ONCLICK HANDLER ***
+            cacheButton.onclick = () => {
+                // Use innerText which includes the icon now
+                console.log(`Cache button clicked for: ${folder.path}. Initial state: ${cacheButton.innerText}`); 
+                handleCacheFolder(cacheButton, folder.path);
+            };
 
             folderListBody.appendChild(row);
         });
@@ -320,89 +407,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Action Handlers ---
     async function handleCacheFolder(button, folderPath) {
-        console.log(`handleCacheFolder called for path: ${folderPath}`); // LOG 3
+        console.log(`handleCacheFolder called for path: ${folderPath}`);
 
-        // Xác nhận trước khi gửi yêu cầu
+        // Check if already polling (button should be disabled, but as extra check)
+        if (activePollers[folderPath]) {
+            console.warn(`[Cache Request ${folderPath}] Ignoring click, already polling/processing.`);
+            return;
+        }
+        
         if (!confirm(`Bạn có chắc muốn yêu cầu tạo/cập nhật cache cho thư mục "${folderPath}"? Quá trình này sẽ chạy trong nền.`)) {
             console.log('Cache request cancelled by user.');
             return;
         }
         
-        // Lưu trạng thái nút gốc để có thể khôi phục nếu API call ban đầu thất bại
-        const originalButtonText = button.textContent;
+        const originalButtonHTML = button.innerHTML; // Store original HTML (with icon)
         const originalButtonTitle = button.title;
         
-        // Cập nhật giao diện ngay lập tức để phản hồi
         button.disabled = true;
-        button.textContent = 'Đang yêu cầu...';
-        // Không dùng showLoading toàn cục nữa vì API trả về nhanh
-        // showLoading('Đang gửi yêu cầu cache...'); 
+        button.innerHTML = `⏳ Đang yêu cầu...`; // Temp requesting state
 
         try {
             const formData = new FormData();
             formData.append('action', 'admin_cache_folder');
             formData.append('path', folderPath);
 
-            // Sử dụng fetch trực tiếp vì fetchData có thể không phù hợp với cấu trúc response mới hoàn toàn
             const response = await fetch('api.php', { method: 'POST', body: formData });
             const result = await response.json();
-            console.log('API response received:', result); // LOG 4 (result is the direct JSON data)
-
-            // Ẩn loading nếu có
-             hideLoading(); 
+            console.log('API response received:', result);
 
             if (!response.ok || result.success !== true) {
-                // Lỗi từ API (bao gồm cả lỗi validation, server error khi enqueue)
                 throw new Error(result.error || result.message || `Lỗi HTTP ${response.status}`);
             }
 
-            // Xử lý phản hồi thành công từ API (đã đưa vào hàng đợi hoặc đã có sẵn)
-            let feedbackType = 'info'; // Mặc định là info cho trạng thái chờ
-            let finalButtonText = 'Đang chờ xử lý';
-            let finalButtonTitle = 'Yêu cầu tạo cache đang chờ xử lý trong nền.';
-
-            if (result.status === 'already_queued') {
-                 feedbackType = 'warning';
-                 finalButtonText = 'Đang xử lý/chờ'; // Trạng thái nút nếu đã có job
-                 finalButtonTitle = 'Yêu cầu cache cho thư mục này đã có trong hàng đợi hoặc đang xử lý.';
-            } else if (result.status === 'queued') {
-                 feedbackType = 'success'; // Thành công đưa vào hàng đợi
-                 // Giữ nguyên finalButtonText và finalButtonTitle là 'Đang chờ xử lý'
-            }
-
-            // Hiển thị thông báo từ API
-            showFeedback(result.message || 'Yêu cầu đã được gửi.', feedbackType);
-
-            // Cập nhật nút với trạng thái mới (thường là 'Đang chờ xử lý')
-            // Nút vẫn bị disable để tránh gửi yêu cầu liên tục
-            button.textContent = finalButtonText;
-            button.title = finalButtonTitle;
-            button.disabled = true; // Giữ nút disable
-            console.log(`Button state set to: ${finalButtonText}`);
-
-            // LƯU Ý QUAN TRỌNG:
-            // Trạng thái nút sẽ chỉ cập nhật thành "Đã cache" khi:
-            // 1. Worker chạy nền hoàn thành công việc.
-            // 2. Dữ liệu được load lại (fetchAndRenderFolders) và API `admin_list_folders`
-            //    trả về giá trị `last_cached_fully_at` mới nhất cho thư mục này.
-            // Do đó, không cần cập nhật nút về trạng thái "Đã cache" ngay tại đây.
-            // Cân nhắc: Có thể reload lại danh sách sau một khoảng thời gian ngắn 
-            // để cập nhật trạng thái nút nếu worker xử lý nhanh?
-            // setTimeout(() => fetchAndRenderFolders(adminSearchInput.value.trim()), 5000); // Ví dụ: reload sau 5s
-
+            // SUCCESS: Job queued or already running
+            showFeedback(result.message || 'Yêu cầu đã được xử lý.', result.status === 'queued' ? 'success' : 'warning');
+            
+            // *** START POLLING *** 
+            // API already told us the current status ('queued' or 'already_queued')
+            // We can update the button state immediately and start polling
+            const initialJobStatus = (result.status === 'queued') ? 'pending' : (activePollers[folderPath] ? activePollers[folderPath].status : 'pending'); // Assume pending if already queued
+            updateCacheButtonState(button, folderPath, initialJobStatus, null); // Update state, lastCachedAt unknown yet
+            startPolling(button, folderPath); // Start the polling process
 
         } catch (error) {
-            // Lỗi xảy ra khi gọi API ban đầu (fetch thất bại, JSON parse lỗi, hoặc API trả về lỗi)
+            // FAILURE: API call failed
             hideLoading(); 
             console.error("Error requesting cache job:", error);
             showFeedback(`Lỗi gửi yêu cầu cache: ${error.message}`, "error");
             
-            // Khôi phục trạng thái nút về ban đầu nếu yêu cầu API thất bại
-             button.textContent = originalButtonText;
+            // Restore original button state on failure
+             button.innerHTML = originalButtonHTML;
              button.title = originalButtonTitle;
-             button.disabled = false; // Cho phép thử lại
+             button.disabled = false; // Re-enable
+             stopPolling(folderPath); // Ensure no poller is running after failure
         }
-        // Không có finally block vì button state được quản lý trong try/catch
     }
 
     // --- Search Input Listener --- 
@@ -463,7 +521,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Initial Load and Start Refresh ---
-    fetchAndRenderFolders().finally(() => {
+    fetchAndRenderFolders()
+    .finally(() => {
          startAutoRefresh(); // Bắt đầu tự động refresh sau khi tải lần đầu
     });
 

@@ -92,6 +92,20 @@ switch ($action) {
                 error_log("ERROR fetching folder stats for admin: " . $e->getMessage());
             }
 
+            // +++ NEW: Fetch active cache job statuses +++
+            $active_cache_jobs = [];
+            try {
+                 $sql_jobs = "SELECT folder_path, status FROM cache_jobs WHERE status IN ('pending', 'processing')";
+                 $stmt_jobs = $pdo->query($sql_jobs);
+                 while ($job_row = $stmt_jobs->fetch(PDO::FETCH_ASSOC)) {
+                     $active_cache_jobs[$job_row['folder_path']] = $job_row['status'];
+                 }
+            } catch (PDOException $e) {
+                 error_log("ERROR fetching active cache job statuses for admin: " . $e->getMessage());
+                 // Continue without job status if query fails
+            }
+            // +++ END NEW +++
+
             // Iterate through IMAGE_SOURCES
             foreach (IMAGE_SOURCES as $source_key => $source_config) {
                 if (!is_array($source_config) || !isset($source_config['path'])) continue;
@@ -131,7 +145,8 @@ switch ($action) {
                             'protected' => isset($protected_status[$source_prefixed_path]),
                             'views' => $stats['views'],
                             'downloads' => $stats['downloads'],
-                            'last_cached_fully_at' => $stats['last_cached_fully_at']
+                            'last_cached_fully_at' => $stats['last_cached_fully_at'],
+                            'current_cache_job_status' => $active_cache_jobs[$source_prefixed_path] ?? null
                         ];
                     }
                 } catch (Exception $e) {
@@ -273,6 +288,57 @@ switch ($action) {
         }
         break;
     // +++ END ASYNC CACHE ACTION +++
+
+    // +++ ACTION: Get specific folder cache status (for polling) +++
+    case 'get_folder_cache_status':
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') { // Use GET for status check
+            json_error('Method Not Allowed', 405);
+        }
+        $folder_path_param = $_GET['path'] ?? null;
+        if (!$folder_path_param) {
+            json_error('Missing folder path parameter.', 400);
+        }
+
+        // Basic validation, might not need full validate_source_and_path if just checking DB
+        $path_parts = explode('/', trim(str_replace(['..', '\\', "\0"], '', $folder_path_param), '/'), 2);
+        if (count($path_parts) < 2 || !isset(IMAGE_SOURCES[$path_parts[0]])) {
+            json_error('Invalid folder path format.', 400);
+        }
+        $validated_folder_path = $path_parts[0] . '/' . $path_parts[1]; // Use validated format
+
+        try {
+            $current_job_status = null;
+            $last_cached_at = null;
+
+            // Check for active job
+            $sql_job = "SELECT status FROM cache_jobs WHERE folder_path = ? AND status IN ('pending', 'processing') LIMIT 1";
+            $stmt_job = $pdo->prepare($sql_job);
+            $stmt_job->execute([$validated_folder_path]);
+            $current_job_status = $stmt_job->fetchColumn() ?: null; // Fetch status or null
+
+            // Get last cache time
+            $sql_stat = "SELECT last_cached_fully_at FROM folder_stats WHERE folder_name = ? LIMIT 1";
+            $stmt_stat = $pdo->prepare($sql_stat);
+            $stmt_stat->execute([$validated_folder_path]);
+            $last_cached_at = $stmt_stat->fetchColumn() ?: null; // Fetch timestamp or null
+            
+            // Ensure last_cached_at is integer or null
+            if ($last_cached_at !== null) {
+                $last_cached_at = (int)$last_cached_at;
+            }
+
+            json_response([
+                'success' => true, 
+                'job_status' => $current_job_status, 
+                'last_cached_at' => $last_cached_at
+            ]);
+
+        } catch (Throwable $e) {
+            error_log("[Get Cache Status] Error for '{$validated_folder_path}': " . $e->getMessage());
+            json_error("Đã xảy ra lỗi khi kiểm tra trạng thái cache: " . $e->getMessage(), 500);
+        }
+        break;
+    // +++ END GET STATUS ACTION +++
 
     default:
         // If the action starts with 'admin_' but isn't handled above

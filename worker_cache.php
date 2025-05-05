@@ -27,6 +27,26 @@ try {
     exit(1); // Thoát với mã lỗi
 }
 
+// +++ NEW: Reset 'processing' jobs to 'pending' on startup +++
+try {
+    $sql_reset = "UPDATE cache_jobs SET status = 'pending' WHERE status = 'processing'";
+    $stmt_reset = $pdo->prepare($sql_reset);
+    $affected_rows = $stmt_reset->execute() ? $stmt_reset->rowCount() : 0;
+    if ($affected_rows > 0) {
+        $reset_timestamp = date('Y-m-d H:i:s');
+        $message = "[{$reset_timestamp}] [Worker Startup] Reset {$affected_rows} stuck 'processing' jobs back to 'pending'.";
+        echo $message . "\n";
+        error_log($message);
+    }
+} catch (Throwable $e) {
+    $reset_fail_timestamp = date('Y-m-d H:i:s');
+    $error_message = "[{$reset_fail_timestamp}] [Worker Startup Error] Failed to reset processing jobs: " . $e->getMessage();
+    echo $error_message . "\n";
+    error_log($error_message);
+    // Continue running even if reset fails, but log the error
+}
+// +++ END NEW +++
+
 // --- Biến Worker --- 
 $sleep_interval = 5; // Số giây chờ giữa các lần kiểm tra hàng đợi (giây)
 $running = true;
@@ -67,16 +87,29 @@ while ($running) {
             echo "\n[{$timestamp}] [Job {$job_id}] Found job for folder: {$folder_path_param}\n";
             error_log("[{$timestamp}] [Job {$job_id}] Processing job for folder: {$folder_path_param}");
 
+            // +++ ADD SMALL DELAY to potentially avoid immediate lock contention +++
+            usleep(100000); // Sleep for 100 milliseconds (0.1 seconds)
+
             // --- Cập nhật trạng thái thành 'processing' --- 
             $sql_update_status = "UPDATE cache_jobs SET status = 'processing', processed_at = ? WHERE id = ?";
+            error_log("[{$timestamp}] [Job {$job_id}] Preparing status update query...");
             $stmt_update = $pdo->prepare($sql_update_status);
-            $stmt_update->execute([time(), $job_id]);
+            error_log("[{$timestamp}] [Job {$job_id}] Attempting to execute status update...");
+            if ($stmt_update->execute([time(), $job_id])) {
+                error_log("[{$timestamp}] [Job {$job_id}] Status updated to processing.");
+            } else {
+                error_log("[{$timestamp}] [Job {$job_id}] FAILED to execute status update to processing.");
+                throw new Exception("Failed to execute status update query for job {$job_id}");
+            }
 
             // --- Thực hiện Tạo Cache --- 
+            error_log("[{$timestamp}] [Job {$job_id}] Validating path...");
             $path_info = validate_source_and_path($folder_path_param); // Xác thực lại đường dẫn
             if (!$path_info || $path_info['is_root']) {
+                 error_log("[{$timestamp}] [Job {$job_id}] Path validation failed or is root.");
                  throw new Exception("Invalid or root folder path retrieved from job: {$folder_path_param}");
             }
+            error_log("[{$timestamp}] [Job {$job_id}] Path validated. Absolute path: " . ($path_info['absolute_path'] ?? 'N/A'));
             
             $source_key = $path_info['source_key'];
             $absolute_folder_path = $path_info['absolute_path'];
@@ -89,8 +122,10 @@ while ($running) {
             $job_result_message = '';
             
             try {
-                $directory = new RecursiveDirectoryIterator($absolute_folder_path, RecursiveDirectoryIterator::SKIP_DOTS);
+                error_log("[{$timestamp}] [Job {$job_id}] Creating RecursiveDirectoryIterator...");
+                $directory = new RecursiveDirectoryIterator($absolute_folder_path, RecursiveDirectoryIterator::SKIP_DOTS | FilesystemIterator::FOLLOW_SYMLINKS);
                 $iterator = new RecursiveIteratorIterator($directory, RecursiveIteratorIterator::LEAVES_ONLY);
+                error_log("[{$timestamp}] [Job {$job_id}] Iterator created. Starting file loop...");
                 
                 $allowed_ext = ALLOWED_EXTENSIONS; // Hằng số từ db_connect.php
                 // LẤY KÍCH THƯỚC LỚN NHẤT TỪ CẤU HÌNH
@@ -102,6 +137,7 @@ while ($running) {
                 $large_thumb_size = max($all_configured_sizes); // Chỉ lấy kích thước lớn nhất
 
                 foreach ($iterator as $fileinfo) {
+                    error_log("[{$timestamp}] [Job {$job_id}] Processing item: " . $fileinfo->getPathname());
                     if ($fileinfo->isFile() && $fileinfo->isReadable() && in_array(strtolower($fileinfo->getExtension()), $allowed_ext, true)) {
                         $files_processed++;
                         $image_absolute_path = $fileinfo->getRealPath();
@@ -126,21 +162,25 @@ while ($running) {
                         if (file_exists($cache_absolute_path)) {
                             $skipped_count++;
                         } else {
+                            error_log("[{$timestamp}] [Job {$job_id}] Calling create_thumbnail for: " . $image_absolute_path . " -> " . $cache_absolute_path);
                             if (create_thumbnail($image_absolute_path, $cache_absolute_path, $size)) {
                                 $created_count++;
                             } else {
+                                error_log("[{$timestamp}] [Job {$job_id}] create_thumbnail returned false for: " . $image_absolute_path);
                                 $error_count++;
                                 $job_success = false; 
-                                // Log is handled within create_thumbnail
                             }
                         }
                         // Kết thúc xử lý kích thước lớn cho file này
 
-                    } // End if is file
+                    } else {
+                         error_log("[{$timestamp}] [Job {$job_id}] Skipping item (not a valid/readable image file): " . $fileinfo->getPathname());
+                    }
                      // Check for shutdown signal periodically inside the loop if needed
                      if (function_exists('pcntl_signal_dispatch')) pcntl_signal_dispatch();
                      if (!$running) break; // Exit inner loop if shutdown requested
                 } // End foreach iterator
+                error_log("[{$timestamp}] [Job {$job_id}] File loop finished.");
 
                  if (!$running) {
                      echo "[{$timestamp}] [Job {$job_id}] Shutdown requested during processing. Marking as failed.\n";

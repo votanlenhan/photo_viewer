@@ -104,6 +104,7 @@ $options = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // Throw exceptions on error
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,       // Fetch associative arrays by default
     PDO::ATTR_EMULATE_PREPARES   => false,                  // Use native prepared statements
+    PDO::ATTR_TIMEOUT => 5 
 ];
 
 // --- Establish Connection ---
