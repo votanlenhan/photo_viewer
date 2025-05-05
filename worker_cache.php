@@ -162,13 +162,17 @@ while ($running) {
                         if (file_exists($cache_absolute_path)) {
                             $skipped_count++;
                         } else {
-                            error_log("[{$timestamp}] [Job {$job_id}] Calling create_thumbnail for: " . $image_absolute_path . " -> " . $cache_absolute_path);
-                            if (create_thumbnail($image_absolute_path, $cache_absolute_path, $size)) {
-                                $created_count++;
-                            } else {
-                                error_log("[{$timestamp}] [Job {$job_id}] create_thumbnail returned false for: " . $image_absolute_path);
+                            try {
+                                error_log("[{$timestamp}] [Job {$job_id}] Calling create_thumbnail for: " . $image_absolute_path . " -> " . $cache_absolute_path);
+                                if (create_thumbnail($image_absolute_path, $cache_absolute_path, $size)) {
+                                    $created_count++;
+                                } 
+                                // No 'else' needed here as create_thumbnail now throws Exception on failure
+                            } catch (Exception $thumb_e) {
                                 $error_count++;
-                                $job_success = false; 
+                                $job_success = false; // Mark job as having errors
+                                error_log("[{$timestamp}] [Job {$job_id}] Failed to create thumbnail for '{$image_absolute_path}': " . $thumb_e->getMessage());
+                                // Continue to the next file
                             }
                         }
                         // Kết thúc xử lý kích thước lớn cho file này
@@ -193,13 +197,18 @@ while ($running) {
                 error_log("[{$timestamp}] [Job {$job_id}] Result: {$job_result_message}");
 
                 // Update final job status
-                $final_status = ($error_count === 0) ? 'completed' : 'failed';
+                $final_status = ($error_count === 0 && $running) ? 'completed' : 'failed'; // Mark failed if errors OR if shutdown was requested
+                // If shutdown was requested mid-process, add note to result message
+                if (!$running && $final_status === 'failed') {
+                    $job_result_message .= " (Dừng do yêu cầu tắt worker)";
+                }
+
                 $sql_finish = "UPDATE cache_jobs SET status = ?, completed_at = ?, result_message = ? WHERE id = ?";
                 $stmt_finish = $pdo->prepare($sql_finish);
                 $stmt_finish->execute([$final_status, time(), $job_result_message, $job_id]);
                 echo "[{$timestamp}] [Job {$job_id}] Marked job as {$final_status}.\n";
                 
-                // Cập nhật last_cached_fully_at nếu thành công hoàn toàn
+                // Cập nhật last_cached_fully_at chỉ khi hoàn thành không lỗi VÀ worker không bị dừng
                 if ($final_status === 'completed') {
                     try {
                         $sql_update_stats = "INSERT INTO folder_stats (folder_name, views, downloads, last_cached_fully_at) VALUES (?, 0, 0, ?) 
@@ -221,18 +230,22 @@ while ($running) {
                 }
                 
             } catch (Throwable $e) {
-                // Lỗi trong quá trình xử lý một công việc cụ thể
+                // Lỗi trong quá trình xử lý một công việc cụ thể (ví dụ: lỗi duyệt thư mục)
                 $timestamp = date('Y-m-d H:i:s');
-                $error_message = "Error processing job {$job_id} for '{$folder_path_param}': " . $e->getMessage();
-                echo "[{$timestamp}] [Job {$job_id}] {$error_message}\n";
-                error_log("[{$timestamp}] [Job {$job_id}] {$error_message}");
+                $base_error_message = "Error processing job {$job_id} for '{$folder_path_param}': " . $e->getMessage();
+                 // Cố gắng thêm số liệu vào thông báo lỗi
+                $detailed_error_message = sprintf("%s | Đã xử lý: %d, Tạo: %d, Bỏ qua: %d, Lỗi ảnh: %d.",
+                                                $base_error_message, $files_processed, $created_count, $skipped_count, $error_count);
+                
+                echo "[{$timestamp}] [Job {$job_id}] {$base_error_message}\n"; // Log lỗi gốc ngắn gọn ra console
+                error_log("[{$timestamp}] [Job {$job_id}] {$detailed_error_message}"); // Log lỗi chi tiết hơn vào file
                 error_log("[{$timestamp}] [Job {$job_id}] Stack Trace: \n" . $e->getTraceAsString());
                 
-                // Cập nhật trạng thái công việc thành 'failed'
+                // Cập nhật trạng thái công việc thành 'failed' với thông báo lỗi chi tiết hơn
                 try {
                     $sql_fail = "UPDATE cache_jobs SET status = 'failed', completed_at = ?, result_message = ? WHERE id = ?";
                     $stmt_fail = $pdo->prepare($sql_fail);
-                    $stmt_fail->execute([time(), $error_message, $job_id]);
+                    $stmt_fail->execute([time(), $detailed_error_message, $job_id]); // Use detailed message
                     echo "[{$timestamp}] [Job {$job_id}] Marked job as failed due to error.\n";
                 } catch (PDOException $pdo_e) {
                      error_log("[{$timestamp}] [Job {$job_id}] CRITICAL: Failed to mark job as failed after error: " . $pdo_e->getMessage());

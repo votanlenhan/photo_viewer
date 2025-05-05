@@ -359,116 +359,127 @@ function find_first_image_in_source($source_key, $relative_dir_path, array &$all
  * @param string $source_path Absolute path to the source image.
  * @param string $cache_path Absolute path to save the thumbnail.
  * @param int $thumb_size Desired width/height.
- * @return bool True on success, false on failure.
+ * @return bool True on success.
+ * @throws Exception If thumbnail creation fails for any reason (GD error, file I/O).
  */
 function create_thumbnail($source_path, $cache_path, $thumb_size = 150)
 {
-    if (!extension_loaded('gd')) {
-        error_log("[create_thumbnail] GD extension is not loaded.");
-        return false;
-    }
-
-    // Prevent race conditions
-    if (file_exists($cache_path)) {
-        touch($cache_path); // Update timestamp maybe?
-        return true;
-    }
-
     try {
-        if (!is_readable($source_path)) {
-            error_log("[create_thumbnail] Source image not readable: {$source_path}");
-            return false;
+        // Basic validation
+        if (!file_exists($source_path) || !is_readable($source_path)) {
+            throw new Exception("Source file does not exist or is not readable: " . $source_path);
         }
-        $image_info = getimagesize($source_path);
-        if ($image_info === false) {
-            error_log("[create_thumbnail] Failed to get image size for: {$source_path}");
-            return false;
+        if (!$thumb_size || !is_numeric($thumb_size) || $thumb_size <= 0) {
+             throw new Exception("Invalid thumbnail size specified: " . $thumb_size);
         }
-        list($original_width, $original_height, $image_type) = $image_info;
-        $mime = image_type_to_mime_type($image_type);
-
-        $source_image = null;
-        switch ($mime) {
-            case 'image/jpeg': $source_image = imagecreatefromjpeg($source_path); break;
-            case 'image/png': $source_image = imagecreatefrompng($source_path); break;
-            case 'image/gif': $source_image = imagecreatefromgif($source_path); break;
-            case 'image/webp':
-                if (function_exists('imagecreatefromwebp')) {
-                    $source_image = imagecreatefromwebp($source_path);
-                } else {
-                    error_log("[create_thumbnail] WebP not supported by GD: {$source_path}"); return false;
-                }
-                break;
-            default: error_log("[create_thumbnail] Unsupported type '{$mime}': {$source_path}"); return false;
-        }
-
-        if ($source_image === false) {
-            error_log("[create_thumbnail] Failed to create image resource from: {$source_path}");
-            return false;
-        }
-
-        // Calculate new dimensions (simple resize, maintain aspect ratio)
-        $ratio = $original_width / $original_height;
-        if ($original_width > $original_height) {
-            $thumb_width = $thumb_size;
-            $thumb_height = intval($thumb_size / $ratio);
-        } else {
-            $thumb_height = $thumb_size;
-            $thumb_width = intval($thumb_size * $ratio);
-        }
-        // Prevent zero dimensions
-        $thumb_width = max(1, $thumb_width);
-        $thumb_height = max(1, $thumb_height);
-
-        $thumb_image = imagecreatetruecolor($thumb_width, $thumb_height);
-        if ($thumb_image === false) {
-            error_log("[create_thumbnail] Failed to create true color canvas.");
-            imagedestroy($source_image); return false;
-        }
-
-        // Handle transparency for PNG/GIF
-        if ($mime == 'image/png' || $mime == 'image/gif') {
-            imagealphablending($thumb_image, false);
-            imagesavealpha($thumb_image, true);
-            $transparent = imagecolorallocatealpha($thumb_image, 255, 255, 255, 127);
-            imagefilledrectangle($thumb_image, 0, 0, $thumb_width, $thumb_height, $transparent);
-        }
-
-        if (!imagecopyresampled($thumb_image, $source_image, 0, 0, 0, 0, $thumb_width, $thumb_height, $original_width, $original_height)) {
-            error_log("[create_thumbnail] imagecopyresampled failed.");
-            imagedestroy($source_image); imagedestroy($thumb_image); return false;
-        }
-
         // Ensure cache directory exists
         $cache_dir = dirname($cache_path);
         if (!is_dir($cache_dir)) {
-            if (!mkdir($cache_dir, 0775, true)) {
-                error_log("[create_thumbnail] Failed to create cache directory: {$cache_dir}");
-                imagedestroy($source_image); imagedestroy($thumb_image); return false;
+            if (!@mkdir($cache_dir, 0775, true)) {
+                 throw new Exception("Failed to create cache directory: " . $cache_dir);
+            }
+        }
+        if (!is_writable($cache_dir)) {
+             throw new Exception("Cache directory is not writable: " . $cache_dir);
+        }
+
+        // Get image info
+        $image_info = @getimagesize($source_path);
+        if (!$image_info) {
+            throw new Exception("Failed to get image size (unsupported format or corrupt?): " . $source_path);
+        }
+        $width = $image_info[0];
+        $height = $image_info[1];
+        $mime = $image_info['mime'];
+
+        // Load image based on MIME type
+        $image = null;
+        switch ($mime) {
+            case 'image/jpeg':
+            case 'image/jpg':
+                $image = @imagecreatefromjpeg($source_path);
+                break;
+            case 'image/png':
+                $image = @imagecreatefrompng($source_path);
+                break;
+            case 'image/gif':
+                $image = @imagecreatefromgif($source_path);
+                break;
+            case 'image/bmp':
+            case 'image/x-ms-bmp':
+                $image = @imagecreatefrombmp($source_path); // Requires GD >= 7.2.0
+                break;
+            case 'image/webp':
+                $image = @imagecreatefromwebp($source_path); // Requires GD >= 7.0.0 with WebP support
+                break;
+            default:
+                 throw new Exception("Unsupported image type: {$mime} for file " . $source_path);
+        }
+
+        if (!$image) {
+            // Check for memory limit issues if loading failed
+            $last_error = error_get_last();
+            $error_detail = $last_error ? " (Last Error: " . $last_error['message'] . ")" : "";
+             throw new Exception("Failed to load image resource (memory limit? corrupt file?): {$mime}{$error_detail} from " . $source_path);
+        }
+
+        // Calculate thumbnail dimensions (maintaining aspect ratio)
+        $aspect_ratio = $width / $height;
+        if ($width > $height) {
+            // Landscape or Square
+            $new_width = $thumb_size;
+            $new_height = $new_width / $aspect_ratio;
+        } else {
+            // Portrait
+            $new_height = $thumb_size;
+            $new_width = $new_height * $aspect_ratio;
+        }
+
+        // Create new image resource for the thumbnail
+        $thumb = @imagecreatetruecolor((int)$new_width, (int)$new_height);
+        if (!$thumb) {
+             imagedestroy($image); // Clean up original image resource
+             throw new Exception("Failed to create true color image resource for thumbnail (width: {$new_width}, height: {$new_height}).");
+        }
+
+        // Handle transparency for PNG and GIF
+        if ($mime == 'image/png' || $mime == 'image/gif') {
+            @imagealphablending($thumb, false);
+            @imagesavealpha($thumb, true);
+            $transparent_color = @imagecolorallocatealpha($thumb, 0, 0, 0, 127);
+            if ($transparent_color !== false) {
+                 @imagefill($thumb, 0, 0, $transparent_color);
+            } else {
+                error_log("[create_thumbnail] Warning: Failed to allocate transparent color for {$source_path}");
             }
         }
 
-        // Save thumbnail (use JPEG for consistency)
-        $save_success = imagejpeg($thumb_image, $cache_path, 85); // Quality 85
-
-        imagedestroy($source_image);
-        imagedestroy($thumb_image);
-
-        if (!$save_success) {
-            error_log("[create_thumbnail] Failed to save thumbnail to: {$cache_path}");
-            if (file_exists($cache_path)) unlink($cache_path); // Clean up failed attempt
-            return false;
+        // Resize original image into the thumbnail resource
+        // Use imagecopyresampled for better quality
+        if (!@imagecopyresampled($thumb, $image, 0, 0, 0, 0, (int)$new_width, (int)$new_height, $width, $height)) {
+            imagedestroy($image);
+            imagedestroy($thumb);
+             throw new Exception("Failed to resample image for thumbnail: " . $source_path);
         }
 
-        // error_log("[create_thumbnail] Created thumbnail: {$cache_path}"); // Optional logging
-        return true;
+        // Save the thumbnail as JPEG (common format for cache)
+        $quality = 85; // Adjust quality (0-100)
+        if (!@imagejpeg($thumb, $cache_path, $quality)) {
+             imagedestroy($image);
+             imagedestroy($thumb);
+             throw new Exception("Failed to save thumbnail JPEG to: " . $cache_path);
+        }
 
-    } catch (Throwable $e) {
-        error_log("[create_thumbnail] Exception for {$source_path} -> {$cache_path} : " . $e->getMessage());
-        if (isset($source_image) && is_resource($source_image)) imagedestroy($source_image);
-        if (isset($thumb_image) && is_resource($thumb_image)) imagedestroy($thumb_image);
-        if (file_exists($cache_path)) unlink($cache_path); // Clean up failed attempt if exception occurs
-        return false;
+        // Clean up resources
+        imagedestroy($image);
+        imagedestroy($thumb);
+
+        return true; // Success
+
+    } catch (Throwable $e) { // Catch any error or exception
+         error_log("[create_thumbnail] Error for source '{$source_path}' -> cache '{$cache_path}': " . $e->getMessage());
+         // Rethrow the exception to be caught by the caller (worker)
+         throw new Exception("Thumbnail generation failed for '{$source_path}': " . $e->getMessage(), 0, $e);
     }
 }
 
