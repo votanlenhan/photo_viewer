@@ -1,0 +1,103 @@
+rules:
+  - rule: Enforce English commit messages.
+    description: |
+      All Git commit messages must be written in English. 
+      Use conventional commit format if possible (e.g., feat:, fix:, chore:, docs:).
+
+  - rule: Identify core technologies.
+    description: |
+      The backend is primarily PHP (>=7.4).
+      The database is SQLite.
+      The frontend uses Vanilla JavaScript (ES Modules), CSS, and HTML.
+      PhotoSwipe 5 is used for the image lightbox.
+      PHP extensions required: pdo_sqlite, gd, zip, mbstring, fileinfo.
+
+  - rule: Understand key project structure.
+    description: |
+      - `index.php`: Main frontend page.
+      - `js/app.js`: Main frontend logic.
+      - `css/style.css`: Main stylesheet.
+      - `api.php`: Main API entry point, delegates to files in `api/`.
+      - `api/init.php`: API initialization (config, DB, session).
+      - `api/helpers.php`: Common helper functions.
+      - `api/actions_public.php`: Handles public API actions.
+      - `api/actions_admin.php`: Handles admin-only API actions.
+      - `config.php`: Central configuration file (DB credentials, image sources, admin user). **Sensitive, do not commit credentials.**
+      - `db_connect.php`: Core setup (requires config, connects DB, defines sources, auto-creates tables).
+      - `database.sqlite`: SQLite database file.
+      - `cache/thumbnails/`: Stores generated thumbnails.
+      - `images/`: Default image source directory (can be configured).
+      - `logs/`: Application log files.
+
+  - rule: Recognize path convention.
+    description: |
+      The application uses a source-prefixed path convention: `source_key/relative/path/to/item`. 
+      This format is used in the API, database, and URL hashes.
+      `source_key` refers to a key defined in the `IMAGE_SOURCES` array within `db_connect.php` (loaded from `config.php`).
+      Validation against these sources is crucial (see `validate_source_and_path` in `api/helpers.php`).
+
+  - rule: Follow project priorities.
+    description: |
+      Prioritize Mobile-First design principles.
+      Focus on performance optimizations, especially for image loading (thumbnails) and ZIP generation.
+      Maintain code clarity and structure, especially within the refactored `api/` directory.
+      Ensure security against path traversal and unauthorized access. 
+      
+  - rule: Clean Code Guidelines
+    # Globs can be added here later if needed, e.g., globs: ["**/*.php", "**/*.js"]
+    description: |
+      Guidelines for writing clean, maintainable, and human-readable code. 
+      Apply these rules when writing or reviewing code to ensure consistency and quality.
+
+      --- 
+      # Clean Code Guidelines
+
+      ## Constants Over Magic Numbers
+      - Replace hard-coded values with named constants
+      - Use descriptive constant names that explain the value's purpose
+      - Keep constants at the top of the file or in a dedicated constants file
+
+      ## Meaningful Names
+      - Variables, functions, and classes should reveal their purpose
+      - Names should explain why something exists and how it's used
+      - Avoid abbreviations unless they're universally understood
+
+      ## Smart Comments
+      - Don't comment on what the code does - make the code self-documenting
+      - Use comments to explain why something is done a certain way
+      - Document APIs, complex algorithms, and non-obvious side effects
+
+      ## Single Responsibility
+      - Each function should do exactly one thing
+      - Functions should be small and focused
+      - If a function needs a comment to explain what it does, it should be split
+
+      ## DRY (Don't Repeat Yourself)
+      - Extract repeated code into reusable functions
+      - Share common logic through proper abstraction
+      - Maintain single sources of truth
+
+      ## Clean Structure
+      - Keep related code together
+      - Organize code in a logical hierarchy
+      - Use consistent file and folder naming conventions
+
+      ## Encapsulation
+      - Hide implementation details
+      - Expose clear interfaces
+      - Move nested conditionals into well-named functions
+
+      ## Code Quality Maintenance
+      - Refactor continuously
+      - Fix technical debt early
+      - Leave code cleaner than you found it
+
+      ## Testing
+      - Write tests before fixing bugs
+      - Keep tests readable and maintainable
+      - Test edge cases and error conditions
+
+      ## Version Control
+      - Write clear commit messages
+      - Make small, focused commits
+      - Use meaningful branch names 
