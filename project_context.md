@@ -61,6 +61,9 @@
 *   Đã thử nghiệm và hoàn nguyên về font chữ hệ thống mặc định.
 *   **Đã sửa lỗi hiển thị thumbnail cho thư mục con.**
 *   **Đã khắc phục lỗi thông báo "Đang tạo ZIP" không tự ẩn và lỗi "Bad Request"/"Unexpected token" khi tải ZIP.**
+*   **Đã sửa lỗi cú pháp JavaScript trong `js/admin.js` (thiếu dấu ngoặc đơn, lỗi quote).**
+*   **Đã hoàn thiện logic và giao diện người dùng cho nút cache trong trang admin (`js/admin.js`).**
+*   **Đã thêm tiêu đề cột 'Cache' còn thiếu vào bảng trong trang admin (`admin.php`).**
 
 ## 6. Các Cải tiến & Tối ưu Tiềm năng trong Tương lai
 

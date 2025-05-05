@@ -80,9 +80,13 @@ switch ($action) {
 
             // Fetch folder stats
             try {
-                $stmt = $pdo->query("SELECT folder_name, views, downloads FROM folder_stats");
+                $stmt = $pdo->query("SELECT folder_name, views, downloads, last_cached_fully_at FROM folder_stats");
                 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                    $folder_stats[$row['folder_name']] = ['views' => $row['views'], 'downloads' => $row['downloads']];
+                    $folder_stats[$row['folder_name']] = [
+                        'views' => $row['views'], 
+                        'downloads' => $row['downloads'],
+                        'last_cached_fully_at' => $row['last_cached_fully_at']
+                    ];
                 }
             } catch (PDOException $e) {
                 error_log("ERROR fetching folder stats for admin: " . $e->getMessage());
@@ -114,7 +118,11 @@ switch ($action) {
                             continue;
                         }
 
-                        $stats = $folder_stats[$source_prefixed_path] ?? ['views' => 0, 'downloads' => 0];
+                        $stats = $folder_stats[$source_prefixed_path] ?? [
+                            'views' => 0, 
+                            'downloads' => 0,
+                            'last_cached_fully_at' => null
+                        ];
 
                         $folders_data[] = [
                             'name' => $dir_name,
@@ -122,7 +130,8 @@ switch ($action) {
                             'source' => $source_key,
                             'protected' => isset($protected_status[$source_prefixed_path]),
                             'views' => $stats['views'],
-                            'downloads' => $stats['downloads']
+                            'downloads' => $stats['downloads'],
+                            'last_cached_fully_at' => $stats['last_cached_fully_at']
                         ];
                     }
                 } catch (Exception $e) {
@@ -219,7 +228,118 @@ switch ($action) {
         }
         break;
 
-    // Add other admin actions here if any
+    // +++ NEW ACTION: Manually cache thumbnails for a folder +++
+    case 'admin_cache_folder':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            json_error('Method Not Allowed', 405);
+        }
+        $folder_path_param = $_POST['path'] ?? null;
+        if (!$folder_path_param) {
+            json_error('Missing folder path parameter.', 400);
+        }
+
+        $path_info = validate_source_and_path($folder_path_param);
+        if (!$path_info || $path_info['is_root']) {
+            json_error('Invalid or root folder path provided.', 400);
+        }
+
+        // Increase execution time for potentially long process
+        @ini_set('max_execution_time', '600'); // 10 minutes
+        @ini_set('memory_limit', '1024M');   // Increase memory limit too
+
+        $source_key = $path_info['source_key'];
+        $absolute_folder_path = $path_info['absolute_path'];
+
+        $created_count = 0;
+        $skipped_count = 0;
+        $error_count = 0;
+        $files_processed = 0;
+        $cache_success = true;
+
+        try {
+            $directory = new RecursiveDirectoryIterator($absolute_folder_path, RecursiveDirectoryIterator::SKIP_DOTS);
+            $iterator = new RecursiveIteratorIterator($directory, RecursiveIteratorIterator::LEAVES_ONLY);
+
+            global $allowed_ext; // Assumes $allowed_ext is available from init.php
+            $thumb_sizes_to_create = THUMBNAIL_SIZES_API; // Defined in init.php
+
+            foreach ($iterator as $fileinfo) {
+                if ($fileinfo->isFile() && $fileinfo->isReadable() && in_array(strtolower($fileinfo->getExtension()), $allowed_ext, true)) {
+                    $files_processed++;
+                    $image_absolute_path = $fileinfo->getRealPath();
+
+                    // Calculate the source-prefixed path for the image (needed for cache path generation)
+                    $image_relative_to_source = ltrim(substr($image_absolute_path, strlen(IMAGE_SOURCES[$source_key]['path'])), '\\/');
+                    $image_source_prefixed_path = $source_key . '/' . str_replace('\\', '/', $image_relative_to_source);
+
+                    foreach ($thumb_sizes_to_create as $size) {
+                        $thumb_filename_safe = sha1($image_source_prefixed_path) . '_' . $size . '.jpg';
+                        $cache_path_relative = $source_key . '/' . $thumb_filename_safe;
+                        $cache_absolute_path = CACHE_THUMB_ROOT . DIRECTORY_SEPARATOR . $cache_path_relative;
+
+                        if (file_exists($cache_absolute_path)) {
+                            $skipped_count++;
+                        } else {
+                            if (create_thumbnail($image_absolute_path, $cache_absolute_path, $size)) {
+                                $created_count++;
+                            } else {
+                                $error_count++;
+                                $cache_success = false;
+                                // Log specific error in create_thumbnail function
+                            }
+                        }
+                    }
+                }
+            }
+            
+            error_log("[Admin Cache] Loop finished. Final check values: cache_success=" . ($cache_success ? 'true' : 'false') . ", files_processed={$files_processed}, created_count={$created_count}, skipped_count={$skipped_count}, error_count={$error_count}"); // <<< LOG SAU VÒNG LẶP
+
+            // +++ DI CHUYỂN CẬP NHẬT TIMESTAMP LÊN TRƯỚC JSON RESPONSE +++
+            $update_attempted = false;
+            $update_succeeded = false;
+            error_log("[Admin Cache] Checking update condition: cache_success=" . ($cache_success ? 'true' : 'false') . ", error_count={$error_count}");
+            if ($cache_success && $error_count === 0) { 
+                $update_attempted = true;
+                error_log("[Admin Cache] Condition met. Attempting to update timestamp for '{$folder_path_param}'."); 
+                try {
+                    $sql_update = "INSERT INTO folder_stats (folder_name, views, downloads, last_cached_fully_at) VALUES (?, 0, 0, ?) 
+                                   ON CONFLICT(folder_name) DO UPDATE SET 
+                                       last_cached_fully_at = excluded.last_cached_fully_at,
+                                       views = folder_stats.views, 
+                                       downloads = folder_stats.downloads 
+                                   WHERE folder_stats.folder_name = excluded.folder_name";
+                    $stmt_update = $pdo->prepare($sql_update);
+                    $current_timestamp = time(); 
+                    if ($stmt_update->execute([$folder_path_param, $current_timestamp])) {
+                        error_log("[Admin Cache] Successfully updated last_cached_fully_at for '{$folder_path_param}' with timestamp: {$current_timestamp}.");
+                        $update_succeeded = true;
+                    } else {
+                         error_log("[Admin Cache] execute() returned false for timestamp update '{$folder_path_param}'."); 
+                    }
+                } catch (PDOException $e) {
+                    error_log("[Admin Cache] PDOException Failed to update last_cached_fully_at for '{$folder_path_param}': " . $e->getMessage());
+                }
+            } else {
+                 error_log("[Admin Cache] Condition NOT met for timestamp update.");
+            }
+            // +++ KẾT THÚC DI CHUYỂN +++
+
+            json_response([
+                'success' => true, // Response always indicates completion of the scan
+                'message' => "Thumbnail caching process completed for '{$folder_path_param}'." . ($update_attempted ? ($update_succeeded ? " Timestamp updated." : " Timestamp update failed.") : " Timestamp not updated."), // Thêm thông tin update vào message
+                'files_processed' => $files_processed,
+                'thumbnails_created' => $created_count,
+                'thumbnails_skipped' => $skipped_count,
+                'errors' => $error_count,
+                // 'timestamp_updated' => $update_succeeded // Có thể thêm trường này nếu client cần biết rõ
+            ]);
+
+        } catch (Exception $e) {
+            error_log("[Admin Cache] Error processing folder '{$absolute_folder_path}': " . $e->getMessage());
+            json_error("An error occurred during the caching process: " . $e->getMessage(), 500);
+        }
+        break;
+        // +++ END NEW ACTION +++
 
     default:
         // If the action starts with 'admin_' but isn't handled above

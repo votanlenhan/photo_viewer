@@ -22,6 +22,10 @@ return [
         'guu_ssd' => [
             'path' => 'D:\\2020',
             // 'name' => 'SSD Guu 2020'
+        ],
+        'guu_2025' => [
+            'path' => 'D:\\2025',
+            // 'name' => 'SSD Guu 2020'
         ]
     ],
     'cache_thumb_root' => __DIR__ . '/cache/thumbnails', // Use __DIR__ here, db_connect will resolve realpath

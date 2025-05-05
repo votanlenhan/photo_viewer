@@ -155,6 +155,21 @@ try {
         
         // Create folder_passwords table
         $pdo->exec("CREATE TABLE IF NOT EXISTS folder_passwords (\r\n            folder_name TEXT PRIMARY KEY,\r\n            password_hash TEXT NOT NULL\r\n        )");
+
+        // +++ Add last_cached_fully_at column if it doesn't exist (SQLite specific) +++
+        try {
+            // Check if column exists
+            $stmt_check = $pdo->query("PRAGMA table_info(folder_stats)");
+            $columns = $stmt_check->fetchAll(PDO::FETCH_COLUMN, 1); // Fetch column names
+            if (!in_array('last_cached_fully_at', $columns)) {
+                $pdo->exec("ALTER TABLE folder_stats ADD COLUMN last_cached_fully_at INTEGER NULL");
+                error_log("[DB Connect] Added 'last_cached_fully_at' column to folder_stats table.");
+            }
+        } catch (PDOException $e) {
+            // Log error but continue, as altering might fail if schema changed differently
+            error_log("[DB Connect] Warning: Could not check/add 'last_cached_fully_at' column: " . $e->getMessage());
+        }
+        // +++ End column add +++
     }
 } catch (PDOException $e) {
     error_log("Failed to create or check database tables (folder_stats, folder_passwords): " . $e->getMessage());
