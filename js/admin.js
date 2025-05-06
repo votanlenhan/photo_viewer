@@ -101,15 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
             icon = '🕒';
         } else { // Job is null (completed, failed, or never run)
             if (lastCachedAt) {
-                buttonText = 'Đã cache ảnh lớn';
-                buttonTitle = 'Cache ảnh lớn đã tạo/kiểm tra lúc: ' + new Date(lastCachedAt * 1000).toLocaleString() + '. Click để yêu cầu tạo/kiểm tra lại trong nền.';
+                buttonText = 'Cập nhật Cache';
+                buttonTitle = 'Cache ảnh lớn đã tạo lúc: ' + new Date(lastCachedAt * 1000).toLocaleString() + '. Click để chạy lại quá trình cache trong nền.';
                 isDisabled = false;
-                icon = '✅';
+                icon = '🔄';
             } else {
                 buttonText = 'Tạo Cache Ảnh Lớn';
                 buttonTitle = 'Yêu cầu tạo cache thumbnail kích thước lớn cho thư mục này trong nền.';
                 isDisabled = false;
-                icon = '➕'; // Or maybe a warning if previous attempt failed?
+                icon = '➕';
             }
         }
         
@@ -614,8 +614,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const formData = new FormData();
-            formData.append('action', 'admin_cache_folder');
-            formData.append('path', folderPath);
+            formData.append('action', 'admin_queue_cache');
+            formData.append('folder_path', folderPath);
 
             const response = await fetch('api.php', { method: 'POST', body: formData });
             const result = await response.json();

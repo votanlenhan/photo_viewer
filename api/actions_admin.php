@@ -441,6 +441,68 @@ switch ($action) {
         break;
     // +++ END GET STATUS ACTION +++
 
+    case 'admin_queue_cache':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            json_error('Phương thức không hợp lệ.', 405);
+        }
+        $folder_path = $_POST['folder_path'] ?? '';
+
+        if (empty($folder_path)) {
+            json_error('Thiếu đường dẫn thư mục.', 400);
+        }
+
+        // Validate path structure (source_key/dir_name)
+        if (!preg_match('/^[a-zA-Z0-9_\-]+\/[^\/\\\:\*\?\"<>\|]+$/', $folder_path)) {
+            json_error('Định dạng đường dẫn không hợp lệ.', 400);
+        }
+        
+        // Ensure the source key exists in config
+        list($source_key, ) = explode('/', $folder_path, 2);
+        if (!isset(IMAGE_SOURCES[$source_key])) {
+             json_error('Nguồn ảnh không tồn tại.', 404);
+        }
+
+        try {
+            // +++ CHECK FOR EXISTING PENDING/PROCESSING JOB +++
+            $sql_check = "SELECT id FROM cache_jobs WHERE folder_path = ? AND status IN ('pending', 'processing') LIMIT 1";
+            $stmt_check = $pdo->prepare($sql_check);
+            $stmt_check->execute([$folder_path]);
+            if ($stmt_check->fetchColumn()) {
+                // Job already exists and is pending or processing
+                json_error('Đã có yêu cầu tạo cache cho thư mục này đang chờ hoặc đang xử lý.', 409); // 409 Conflict
+            }
+            // +++ END CHECK +++
+
+            // No active job found, proceed to insert
+            $sql = "INSERT INTO cache_jobs (folder_path, created_at, status) VALUES (?, ?, ?)
+                    ON CONFLICT(folder_path) DO UPDATE SET 
+                        status = 'pending', 
+                        created_at = excluded.created_at,
+                        processed_at = NULL,
+                        completed_at = NULL,
+                        result_message = NULL,
+                        image_count = NULL,
+                        total_files = 0,
+                        processed_files = 0,
+                        current_file_processing = NULL";
+            $stmt = $pdo->prepare($sql);
+            if ($stmt->execute([$folder_path, time(), 'pending'])) {
+                error_log("[admin_queue_cache] Queued cache job for: {$folder_path}");
+                json_response(['success' => true, 'message' => 'Đã thêm yêu cầu tạo cache vào hàng đợi.']);
+            } else {
+                json_error('Không thể thêm yêu cầu vào hàng đợi.', 500);
+            }
+        } catch (PDOException $e) {
+             // Log the detailed PDO exception
+            error_log("[admin_queue_cache] PDOException for {$folder_path}: " . $e->getMessage());
+            // Provide a generic error to the user
+            json_error('Đã xảy ra lỗi khi đưa yêu cầu vào hàng đợi: Lỗi cơ sở dữ liệu.', 500);
+        } catch (Exception $e) {
+             error_log("[admin_queue_cache] Exception for {$folder_path}: " . $e->getMessage());
+             json_error('Đã xảy ra lỗi không mong muốn khi đưa yêu cầu vào hàng đợi.', 500);
+        }
+        break;
+
     default:
         // If the action starts with 'admin_' but isn't handled above
         if (strpos($action, 'admin_') === 0) {
