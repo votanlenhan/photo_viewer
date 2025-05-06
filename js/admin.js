@@ -253,99 +253,94 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("Lỗi tải danh sách thư mục:", error);
             folderListBody.innerHTML = `<tr><td colspan="8" style="color: red;">Lỗi tải dữ liệu: ${error.message}</td></tr>`; // Updated colspan
-            showMessage(`Lỗi tải danh sách: ${error.message}`, 'error');
+            showFeedback(`Lỗi tải danh sách: ${error.message}`, 'error');
         }
     }
 
     // --- Render Table Rows ---
     function renderFolderTable(folders) {
-        if (!folderListBody) return;
-        folderListBody.innerHTML = ''; // Clear existing rows or loading message
+        folderListBody.innerHTML = ''; // Xóa nội dung cũ
 
-        if (!folders || folders.length === 0) {
-            folderListBody.innerHTML = '<tr><td colspan="8">Không tìm thấy thư mục nào.</td></tr>'; // Updated colspan
+        if (folders.length === 0) {
+            folderListBody.innerHTML = '<tr><td colspan="8">Không tìm thấy thư mục nào.</td></tr>';
             return;
         }
 
         folders.forEach(folder => {
             const row = document.createElement('tr');
-            // +++ LOG DỮ LIỆU FOLDER NHẬN ĐƯỢC +++
-            console.log('Rendering row for:', folder);
-            // +++ KẾT THÚC LOG +++
+            row.dataset.folderPath = folder.path; // Lưu đường dẫn để dễ tham chiếu
 
-            const isProtected = folder.protected;
-            const statusClass = isProtected ? 'status-protected' : 'status-unprotected';
-            const statusText = isProtected ? 'Được bảo vệ' : 'Công khai';
+            const folderName = escapeHTML(folder.name);
+            const folderPath = escapeHTML(folder.path);
+            const shareLink = `${window.location.origin}${window.location.pathname.replace(/[^\/]*$/, '')}?#?folder=${encodeURIComponent(folder.path)}`; // Link chia sẻ
+            const views = folder.views || 0;
+            const zipDownloads = folder.zip_downloads || 0;
+            const isPasswordProtected = folder.protected;
             
-            // Generate Share URL using the source-prefixed path (folder.path)
-            const baseUrl = `${window.location.protocol}//${window.location.host}${window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/'))}/`; // Get base path
-            const shareUrl = `${baseUrl}#?folder=${encodeURIComponent(folder.path)}`; // Use folder.path
-
-            // Generate cache status cell content
-            const cacheStatusCellHTML = renderCacheStatusCell(folder);
-
+            // === Thêm data-label vào các ô ===
             row.innerHTML = `
-                <td data-label="Tên thư mục">${escapeHTML(folder.name)}</td>
-                <td data-label="Trạng thái" class="${statusClass}">${statusText}</td>
-                <td data-label="Lượt xem">${folder.views || 0}</td>
-                <td data-label="Lượt tải ZIP">${folder.downloads || 0}</td>
-                <td data-label="Link chia sẻ"><input type="text" value="${escapeHTML(shareUrl)}" readonly title="Click để sao chép" class="share-link-input"></td>
-                <td data-label="Hành động Mật khẩu"> <!-- Hành động Mật khẩu -->
-                    <form class="action-form" data-folder="${escapeHTML(folder.path)}">
-                        <input type="password" name="password" placeholder="Mật khẩu mới..." autocomplete="new-password">
-                        <button type="submit" class="button set-button" title="Đặt hoặc cập nhật mật khẩu">Lưu</button>
-                        ${isProtected ? '<button type="button" class="button remove-button" title="Xóa mật khẩu">Xóa MK</button>' : ''}
+                <td data-label="Tên thư mục"><strong>${folderName}</strong><br><small>${folderPath}</small></td>
+                <td data-label="Trạng thái">
+                    <span class="status-${isPasswordProtected ? 'protected' : 'unprotected'}">
+                        ${isPasswordProtected ? '🔒 Có mật khẩu' : '✅ Công khai'}
+                    </span>
+                </td>
+                <td data-label="Lượt xem">${views}</td>
+                <td data-label="Lượt tải ZIP">${zipDownloads}</td>
+                <td data-label="Link chia sẻ">
+                    <input type="text" class="share-link-input" value="${shareLink}" readonly title="Click để chọn và sao chép">
+                </td>
+                <td data-label="Hành động Mật khẩu">
+                    <form class="action-form password-form" data-folder-path="${folderPath}">
+                        <input type="password" name="new_password" placeholder="Mật khẩu mới..." aria-label="Mật khẩu mới cho ${folderName}">
+                        <button type="submit" class="button set-button" title="Lưu mật khẩu mới (bỏ trống để xóa)">Lưu</button>
+                        ${isPasswordProtected ? `<button type="button" class="button remove-button" title="Xóa mật khẩu hiện tại">Xóa MK</button>` : ''}
                     </form>
                 </td>
-                <td data-label="Trạng thái Cache"> <!-- Trạng thái Cache -->
-                    ${cacheStatusCellHTML}
+                <td data-label="Trạng thái Cache">
+                    ${renderCacheStatusCell(folder)}
                 </td>
-                <td data-label="Hành động Cache"> <!-- Hành động Cache -->
-                    <button class="button button-small cache-folder-btn" title="Yêu cầu tạo/kiểm tra lại cache">Yêu cầu Cache</button>
+                <td data-label="Hành động Cache">
+                     <button class="button cache-button" title="Yêu cầu cache ảnh lớn">...</button> 
                 </td>
             `;
+            // === Kết thúc thêm data-label ===
 
-            // Add event listeners for this row
-            const form = row.querySelector('.action-form');
-            const removeButton = row.querySelector('.remove-button');
-            const shareInput = row.querySelector('.share-link-input');
-            const cacheButton = row.querySelector('.cache-folder-btn');
-
-            form.addEventListener('submit', handlePasswordSubmit);
-            if (removeButton) {
-                removeButton.addEventListener('click', handleRemovePassword);
-            }
-            if (shareInput) {
-                 shareInput.addEventListener('click', handleShareLinkClick);
-            }
+            // Find the cache button and status cell we just created
+            const cacheButton = row.querySelector('.cache-button');
+            const cacheStatusCell = row.querySelector('td[data-label="Trạng thái Cache"]'); // Use the new data-label selector
             
-            // *** Update Cache Button State (Simpler: just disable if pending/processing) *** 
-            const isJobActive = folder.current_cache_job_status === 'pending' || folder.current_cache_job_status === 'processing';
-            cacheButton.disabled = isJobActive;
-            if (isJobActive) {
-                 cacheButton.title = 'Yêu cầu cache đang được xử lý hoặc đang chờ.';
-            }
-            
-            // *** CHECK IF WE NEED TO START POLLING (e.g., on page load if job was already running) ***
-            if (isJobActive) {
-                 // If poller isn't already running for this path, start it
-                 if (!activePollers[folder.path]) {
-                     // Pass the whole row or specific cells to update during polling?
-                     // Let's pass the button and the status cell TD element.
-                     const statusCell = row.querySelector('td:nth-last-child(2)'); // Get the second to last TD
-                     startPolling(cacheButton, statusCell, folder.path);
+            if (cacheButton && cacheStatusCell) {
+                 // Set initial state for the button
+                 updateCacheButtonState(cacheButton, folderPath, folder.current_cache_job_status, folder.last_cached_fully_at);
+    
+                 // Add click listener for caching
+                 cacheButton.addEventListener('click', (e) => {
+                     e.preventDefault();
+                     handleCacheFolder(cacheButton, folderPath); 
+                 });
+    
+                 // Start polling if job is active
+                 if (folder.current_cache_job_status === 'pending' || folder.current_cache_job_status === 'processing') {
+                     startPolling(cacheButton, cacheStatusCell, folderPath);
                  }
-            } else {
-                 // Ensure any old poller for this path is stopped if job is now complete/null
-                 stopPolling(folder.path);
+             } else {
+                console.warn("Could not find cache button or status cell for row:", folderPath);
+             }
+
+
+            // Add event listeners after elements are in the DOM (within the row)
+            const passwordForm = row.querySelector('.password-form');
+            if (passwordForm) {
+                passwordForm.addEventListener('submit', handlePasswordSubmit);
             }
-            
-            // *** ASSIGN ONCLICK HANDLER ***
-            cacheButton.onclick = () => {
-                // Use innerText which includes the icon now
-                console.log(`Cache button clicked for: ${folder.path}. Initial state: ${cacheButton.innerText}`); 
-                handleCacheFolder(cacheButton, folder.path);
-            };
+
+            // === THÊM CODE GẮN EVENT LISTENER CHO NÚT XÓA MK ===
+            const removeButton = row.querySelector('.remove-button');
+            if (removeButton) {
+                 removeButton.addEventListener('click', handleRemovePassword);
+            }
+            // === KẾT THÚC THÊM CODE ===
 
             folderListBody.appendChild(row);
         });
@@ -357,14 +352,14 @@ document.addEventListener('DOMContentLoaded', () => {
         input.select();
         try {
             navigator.clipboard.writeText(input.value).then(() => {
-                 showMessage(`Đã sao chép link cho thư mục: ${input.closest('tr').querySelector('td').textContent}`);
+                 showFeedback(`Đã sao chép link cho thư mục: ${input.closest('tr').querySelector('td').textContent}`);
             }).catch(err => {
                 console.error('Lỗi sao chép link:', err);
-                showMessage('Lỗi: Không thể tự động sao chép.', 'error');
+                showFeedback('Lỗi: Không thể tự động sao chép.', 'error');
             });
         } catch (err) {
             console.error('Lỗi clipboard API:', err);
-            showMessage('Lỗi: Trình duyệt không hỗ trợ sao chép tự động.', 'error');
+            showFeedback('Lỗi: Trình duyệt không hỗ trợ sao chép tự động.', 'error');
         }
     }
 
@@ -372,13 +367,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handlePasswordSubmit(event) {
         event.preventDefault();
         const form = event.target;
-        const folderName = form.dataset.folder;
-        const passwordInput = form.querySelector('input[name="password"]');
+        const folderName = form.dataset.folderPath;
+        const passwordInput = form.querySelector('input[name="new_password"]');
         const password = passwordInput.value;
         const submitButton = form.querySelector('button[type="submit"]');
 
         if (!password) {
-            showMessage('Vui lòng nhập mật khẩu mới.', 'error');
+            showFeedback('Vui lòng nhập mật khẩu mới.', 'error');
             passwordInput.focus();
             return;
         }
@@ -400,14 +395,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(result.error || `Lỗi HTTP ${response.status}`);
             }
 
-            showMessage(result.message || 'Đặt mật khẩu thành công!', 'success');
+            showFeedback(result.message || 'Đặt mật khẩu thành công!', 'success');
             passwordInput.value = ''; // Clear input
             // Reload the list to show updated status
             fetchAndRenderFolders(adminSearchInput.value.trim()); 
 
         } catch (error) {
             console.error("Lỗi đặt mật khẩu:", error);
-            showMessage(`Lỗi: ${error.message}`, 'error');
+            showFeedback(`Lỗi: ${error.message}`, 'error');
         }
 
         submitButton.textContent = originalButtonText;
@@ -418,7 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleRemovePassword(event) {
         const button = event.target;
         const form = button.closest('.action-form');
-        const folderName = form.dataset.folder;
+        const folderName = form.dataset.folderPath;
 
         if (!confirm(`Bạn có chắc muốn xóa mật khẩu cho thư mục "${folderName}"?`)) {
             return;
@@ -439,13 +434,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(result.error || `Lỗi HTTP ${response.status}`);
             }
 
-            showMessage(result.message || 'Xóa mật khẩu thành công!', 'success');
+            showFeedback(result.message || 'Xóa mật khẩu thành công!', 'success');
              // Reload the list to show updated status
              fetchAndRenderFolders(adminSearchInput.value.trim());
 
         } catch (error) {
             console.error("Lỗi xóa mật khẩu:", error);
-            showMessage(`Lỗi: ${error.message}`, 'error');
+            showFeedback(`Lỗi: ${error.message}`, 'error');
             // Re-enable button on error
              button.textContent = 'Xóa MK';
              button.disabled = false;

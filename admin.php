@@ -36,6 +36,9 @@ $admin_username = isset($_SESSION['admin_username']) ? htmlspecialchars($_SESSIO
         </div>
         <p>Quản lý mật khẩu, xem lượt truy cập và lấy link chia sẻ cho các thư mục ảnh gốc.</p>
 
+        <!-- Moved Feedback Div Here -->
+        <div id="admin-feedback" class="feedback-message" style="display: none;"></div> 
+
         <!-- Search Bar for Admin - Styled like homepage -->
         <div class="search-container admin-search">
              <input type="search" id="adminSearchInput" placeholder="Tìm thư mục..." aria-label="Tìm kiếm thư mục">
@@ -65,7 +68,6 @@ $admin_username = isset($_SESSION['admin_username']) ? htmlspecialchars($_SESSIO
             </tbody>
         </table>
 
-        <div id="admin-feedback" class="feedback-message" style="display: none;"></div>
         <div id="admin-loading" class="loading-indicator" style="display: none;">Đang tải...</div>
 
     </div>
