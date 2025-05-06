@@ -229,7 +229,7 @@ switch ($action) {
 
             json_response([
                 'folders' => $folders_data,
-                'total_cache_files' => count($folders_data) // Add count to response
+                // 'total_cache_files' => $total_cache_files // REMOVED from response
             ]);
 
         } catch (Throwable $e) {

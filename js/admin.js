@@ -331,9 +331,6 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchAndRenderFolders(searchTerm = '') {
         if (!folderListBody) return;
         folderListBody.innerHTML = '<tr><td colspan="8">Đang tải dữ liệu...</td></tr>';
-        // Also reset total cache count while loading
-        const totalCacheSpan = document.getElementById('total-cache-count');
-        if (totalCacheSpan) totalCacheSpan.textContent = '...'; 
 
         let apiUrl = 'api.php?action=admin_list_folders';
         if (searchTerm) {
@@ -354,11 +351,6 @@ document.addEventListener('DOMContentLoaded', () => {
             // Render the table
             renderFolderTable(result.folders);
             
-            // Update total cache count display
-            if (totalCacheSpan && result.total_cache_files !== undefined) {
-                 totalCacheSpan.textContent = result.total_cache_files.toLocaleString(); // Format number
-             }
-
         } catch (error) {
             console.error("Lỗi tải danh sách thư mục:", error);
             folderListBody.innerHTML = `<tr><td colspan="8" style="color: red;">Lỗi tải dữ liệu: ${error.message}</td></tr>`; // Updated colspan

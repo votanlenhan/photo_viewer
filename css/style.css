@@ -1389,21 +1389,23 @@ main.container {
     color: #c9d1d9;
 }
 
-/* Cache Stats Display */
+/* Cache Stats Display REMOVED */
+/*
 .cache-stats-display {
-    margin: 15px 0 20px 0; /* Add some vertical spacing */
+    margin: 15px 0 20px 0; 
     padding: 10px 15px;
-    background-color: #161b22; /* Subtle background */
+    background-color: #161b22; 
     border: 1px solid #30363d;
     border-radius: 6px;
-    color: #8b949e; /* Lighter text color */
+    color: #8b949e; 
     font-size: 0.9em;
     text-align: center;
 }
 .cache-stats-display strong {
-    color: #c9d1d9; /* Make the count stand out slightly */
+    color: #c9d1d9; 
     font-weight: 600;
 }
+*/
 
 /* Admin Message/Feedback Box Styling */
 .admin-view .message, 
