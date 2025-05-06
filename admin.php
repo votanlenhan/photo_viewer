@@ -36,6 +36,11 @@ $admin_username = isset($_SESSION['admin_username']) ? htmlspecialchars($_SESSIO
         </div>
         <p>Quản lý mật khẩu, xem lượt truy cập và lấy link chia sẻ cho các thư mục ảnh gốc.</p>
 
+        <!-- Cache Count Display -->
+        <div class="cache-stats-display">
+            Tổng số ảnh cache đã tạo: <strong id="total-cache-count">...</strong>
+        </div>
+
         <!-- Moved Feedback Div Here -->
         <div id="admin-feedback" class="feedback-message" style="display: none;"></div> 
 

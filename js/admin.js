@@ -118,15 +118,17 @@ document.addEventListener('DOMContentLoaded', () => {
         button.disabled = isDisabled;
     }
     
-    // +++ NEW Function to Render Cache Status Cell Content +++
+    // +++ Function to Render Cache Status Cell Content (MODIFIED) +++
     function renderCacheStatusCell(folder) {
         const lastCachedTimestamp = folder.last_cached_fully_at;
         const lastCachedCount = folder.last_cached_image_count;
         const currentJobStatus = folder.current_cache_job_status; // pending or processing
         const lastResultMessage = folder.latest_job_result_message;
+        const folderPath = folder.path; // Get folder path
 
         let statusHTML = '';
         let title = '';
+        let infoIconHTML = '';
 
         if (currentJobStatus === 'processing') {
             statusHTML = '<span class="status-processing">⚙️ Đang xử lý...</span>';
@@ -136,29 +138,127 @@ document.addEventListener('DOMContentLoaded', () => {
             title = 'Yêu cầu cache đang chờ trong hàng đợi.';
         } else if (lastCachedTimestamp) {
             const dateStr = new Date(lastCachedTimestamp * 1000).toLocaleString();
-            // Conditionally create count string
-            const countStr = (lastCachedCount !== null && lastCachedCount !== undefined) 
-                               ? `(${lastCachedCount} ảnh)` 
-                               : '';
-            statusHTML = `<span class="status-completed">✅ Cache lúc:<br>${dateStr}<br>${countStr}</span>`; // Use countStr
-            title = `Đã cache thành công ${countStr ? countStr + ' ' : ''}lúc ${dateStr}.`; // Adjust title
-            // Check if the last job (which might be old) had errors, even if we have a success timestamp
-             if (lastResultMessage && lastResultMessage.toLowerCase().includes('lỗi')) {
-                 statusHTML += `<br><span class="status-warning">⚠️ Lần chạy cuối gặp lỗi:<br>${escapeHTML(lastResultMessage)}</span>`;
-                 title += `\nLưu ý: Lần chạy cache cuối cùng (${lastResultMessage}) đã báo lỗi. Cache hiện tại có thể chưa đầy đủ.`;
-             }
+            const countStr = (lastCachedCount !== null && lastCachedCount !== undefined)
+                               ? `${lastCachedCount} ảnh`
+                               : 'không rõ số lượng';
+            // Display count instead of timestamp
+            statusHTML = `<span class="status-completed">✅ Cache (${countStr})</span>`;
+            title = `Đã cache thành công ${countStr} lúc ${dateStr}.`;
+            // Add info icon only if cache exists
+            infoIconHTML = `<span class="cache-info-icon" data-folder-path="${escapeHTML(folderPath)}" title="Xem chi tiết cache">&#8505;</span>`; // Info symbol
+
+            // Check for past errors even if currently cached
+            if (folder.latest_job_status === 'failed') {
+                statusHTML += `<br><span class="status-warning">⚠️ Lần chạy cuối gặp lỗi</span>`;
+            }
         } else {
             // No cache timestamp, check last job result
-            if (lastResultMessage) {
-                 // Assume last run failed if no timestamp but has result message
-                 statusHTML = `<span class="status-failed">❌ Lỗi cache:<br>${escapeHTML(lastResultMessage)}</span>`;
-                 title = `Lần chạy cache cuối cùng thất bại: ${lastResultMessage}`;
+            if (folder.latest_job_status === 'failed') {
+                 const shortError = escapeHTML(lastResultMessage && lastResultMessage.length > 100 ? lastResultMessage.substring(0, 97) + '...' : (lastResultMessage || 'Lỗi không xác định'));
+                 statusHTML = `<span class="status-failed">❌ Lỗi cache</span>`;
+                 title = `Lần chạy cache cuối cùng thất bại: ${shortError}`;
+                 infoIconHTML = `<span class="cache-info-icon" data-folder-path="${escapeHTML(folderPath)}" title="Xem chi tiết lỗi">&#8505;</span>`;
             } else {
                 statusHTML = '<span class="status-never">➕ Chưa cache</span>';
                 title = 'Chưa có cache ảnh lớn nào được tạo cho thư mục này.';
             }
         }
-        return `<div title="${escapeHTML(title)}">${statusHTML}</div>`;
+        // Combine status and icon
+        return `<div title="${escapeHTML(title)}">${statusHTML} ${infoIconHTML}</div>`;
+    }
+    // +++ END MODIFIED Function +++
+
+    // +++ NEW Function to Show Cache Info Modal +++
+    function showCacheInfoModal(folderData) {
+        // Remove existing modal first
+        const existingModal = document.getElementById('cacheInfoModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const modalOverlay = document.createElement('div');
+        modalOverlay.id = 'cacheInfoModal';
+        modalOverlay.className = 'modal-overlay cache-info-modal'; // Add specific class
+
+        const lastCachedTimestamp = folderData.last_cached_fully_at;
+        const lastCachedCount = folderData.last_cached_image_count;
+        const lastResultMessage = folderData.latest_job_result_message;
+
+        let detailsHTML = '';
+        if (lastCachedTimestamp) {
+            const dateStr = new Date(lastCachedTimestamp * 1000).toLocaleString();
+            const countStr = (lastCachedCount !== null && lastCachedCount !== undefined)
+                               ? `${lastCachedCount} ảnh`
+                               : 'Không rõ số lượng';
+            detailsHTML = `
+                <p><strong>Số lượng ảnh đã cache:</strong> ${escapeHTML(countStr)}</p>
+                <p><strong>Lần cache cuối:</strong> ${escapeHTML(dateStr)}</p>
+            `;
+        } else {
+            detailsHTML = '<p>Chưa có thông tin cache thành công.</p>';
+        }
+
+        if (lastResultMessage) {
+             detailsHTML += `<p><strong>Kết quả lần chạy cuối:</strong><br><span class="job-result-message">${escapeHTML(lastResultMessage)}</span></p>`;
+        }
+
+        modalOverlay.innerHTML = `
+            <div class="modal-box">
+                <h3>Thông tin Cache</h3>
+                <p><strong>Thư mục:</strong> ${escapeHTML(folderData.name)}</p>
+                <p><small><strong>Đường dẫn:</strong> ${escapeHTML(folderData.path)}</small></p>
+                <hr style="margin: 15px 0; border-color: #30363d;">
+                ${detailsHTML}
+                <div class="prompt-actions" style="margin-top: 20px;">
+                    <button class="button close-modal-button">Đóng</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modalOverlay);
+        document.body.classList.add('body-blur'); // Add blur
+
+        // Add listener to close button
+        const closeButton = modalOverlay.querySelector('.close-modal-button');
+        closeButton.addEventListener('click', () => {
+            modalOverlay.remove();
+            document.body.classList.remove('body-blur'); // Remove blur
+        });
+        // Optional: close on overlay click
+        modalOverlay.addEventListener('click', (event) => {
+             if (event.target === modalOverlay) { 
+                 closeButton.click(); 
+             }
+         });
+
+        // Make visible with transition
+        requestAnimationFrame(() => {
+             modalOverlay.classList.add('modal-visible');
+        });
+    }
+    // +++ END NEW Function +++
+
+    // +++ NEW Function to Fetch and Show Cache Info +++
+    async function fetchAndShowCacheInfo(folderPath) {
+        showLoading('Đang lấy thông tin cache...');
+        try {
+            const apiUrl = `api.php?action=admin_list_folders&path_filter=${encodeURIComponent(folderPath)}`;
+            const response = await fetch(apiUrl);
+            const result = await response.json();
+
+            if (!response.ok || !result.folders || result.folders.length === 0) {
+                throw new Error(result.error || `Không tìm thấy thông tin cho thư mục ${folderPath}`);
+            }
+
+            const folderData = result.folders[0];
+            hideLoading();
+            showCacheInfoModal(folderData);
+
+        } catch (error) {
+            hideLoading();
+            console.error('Error fetching cache info:', error);
+            showFeedback(`Lỗi lấy thông tin cache: ${error.message}`, 'error');
+        }
     }
     // +++ END NEW Function +++
 
@@ -231,6 +331,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchAndRenderFolders(searchTerm = '') {
         if (!folderListBody) return;
         folderListBody.innerHTML = '<tr><td colspan="8">Đang tải dữ liệu...</td></tr>';
+        // Also reset total cache count while loading
+        const totalCacheSpan = document.getElementById('total-cache-count');
+        if (totalCacheSpan) totalCacheSpan.textContent = '...'; 
 
         let apiUrl = 'api.php?action=admin_list_folders';
         if (searchTerm) {
@@ -247,8 +350,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (result.error) {
                 throw new Error(result.error);
             }
-
+            
+            // Render the table
             renderFolderTable(result.folders);
+            
+            // Update total cache count display
+            if (totalCacheSpan && result.total_cache_files !== undefined) {
+                 totalCacheSpan.textContent = result.total_cache_files.toLocaleString(); // Format number
+             }
 
         } catch (error) {
             console.error("Lỗi tải danh sách thư mục:", error);
@@ -275,7 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const shareLink = `${window.location.origin}${window.location.pathname.replace(/[^\/]*$/, '')}?#?folder=${encodeURIComponent(folder.path)}`; // Link chia sẻ
             const views = folder.views || 0;
             const zipDownloads = folder.zip_downloads || 0;
-            const isPasswordProtected = folder.protected;
+            const isPasswordProtected = folder.is_password_protected;
             
             // === Thêm data-label vào các ô ===
             row.innerHTML = `
@@ -449,19 +558,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Event Listeners ---
-    /* TẠM THỜI BỎ EVENT DELEGATION
+    // +++ NEW Event Listener for Cache Info Icons (Delegation) +++
     folderListBody.addEventListener('click', (event) => {
-        const target = event.target;
-        console.log('Folder list clicked. Target:', target); // LOG 1: Kiểm tra sự kiện click
-
-        if (target.classList.contains('cache-folder-btn')) {
-            console.log('Cache button clicked.'); // LOG 2: Xác nhận đúng nút được click
-            const row = target.closest('tr');
-            const folderPath = row?.dataset.folderPath;
+        if (event.target.classList.contains('cache-info-icon')) {
+            const folderPath = event.target.dataset.folderPath;
             if (folderPath) {
-                handleCacheFolder(target, folderPath);
+                fetchAndShowCacheInfo(folderPath);
             }
         }
+        // Listener for share link click (can be combined here)
+         if (event.target.classList.contains('share-link-input')) {
+             handleShareLinkClick(event);
+         }
+    });
+    // +++ END NEW Listener +++
+
+    /* TẠM THỜI BỎ EVENT DELEGATION RIÊNG CHO CACHE BUTTON
+    folderListBody.addEventListener('click', (event) => {
+// ... existing code ...
     });
     */
 
@@ -480,11 +594,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        const originalButtonHTML = button.innerHTML; // Store original HTML (with icon)
-        const originalButtonTitle = button.title;
-        
         button.disabled = true;
-        button.innerHTML = `⏳ Đang yêu cầu...`; // Temp requesting state
+        button.innerHTML = `⏳ Đang gửi yêu cầu...`; 
+        button.title = 'Đang gửi yêu cầu cache lên server...';
 
         try {
             const formData = new FormData();
@@ -500,14 +612,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // SUCCESS: Job queued or already running
-            showFeedback(result.message || 'Yêu cầu đã được xử lý.', result.status === 'queued' ? 'success' : 'warning');
+            showFeedback(result.message || 'Yêu cầu đã được xử lý.', result.status === 'queued' ? 'success' : 'warning'); 
             
+            // === SỬA Ở ĐÂY: Cập nhật nút thành 'pending' ngay nếu API trả về 'queued' ===
+            const statusCell = button.closest('tr').querySelector('td[data-label="Trạng thái Cache"]');
+            if (result.status === 'queued') {
+                updateCacheButtonState(button, folderPath, 'pending', null); // Set to pending immediately
+                if (statusCell) {
+                    // Optionally update the cell text immediately too, although polling will overwrite
+                    // statusCell.innerHTML = renderCacheStatusCell({ path: folderPath, current_cache_job_status: 'pending'}); 
+                }
+            } // Nếu status là 'already_queued' hoặc khác, polling sẽ xử lý trạng thái đúng
+
             // *** START POLLING *** 
-            // API already told us the current status ('queued' or 'already_queued')
-            // We need to refresh the row data to get initial job status and then poll
-            // Simpler approach: Just start polling, it will update the row on first check
-            const statusCell = button.closest('tr').querySelector('td:nth-last-child(2)');
-            startPolling(button, statusCell, folderPath); 
+            if (statusCell) {
+                 startPolling(button, statusCell, folderPath); 
+            } else {
+                 console.error(`[Cache Request ${folderPath}] Could not find status cell to start polling.`);
+                 // Maybe restore button state here if polling can't start?
+                 // updateCacheButtonState(button, folderPath, null, null); // Restore to default 'Create Cache'
+            }
 
         } catch (error) {
             // FAILURE: API call failed
@@ -515,10 +639,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Error requesting cache job:", error);
             showFeedback(`Lỗi gửi yêu cầu cache: ${error.message}`, "error");
             
-            // Restore original button state on failure
-             button.innerHTML = originalButtonHTML;
-             button.title = originalButtonTitle;
-             button.disabled = false; // Re-enable
+            // Restore original button state on failure using update function
+             const statusCellFallback = button.closest('tr')?.querySelector('td[data-label="Trạng thái Cache"]');
+             // We need the *current* known status (which is likely null or old) to restore correctly
+             // Fetching it again here might be overkill, let's just restore to a default 'create' state
+             updateCacheButtonState(button, folderPath, null, null); // Restore button to 'Tạo Cache Ảnh Lớn'
              stopPolling(folderPath); // Ensure no poller is running after failure
         }
     }

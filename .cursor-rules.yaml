@@ -1,8 +1,10 @@
 rules:
-  - rule: Enforce English commit messages.
-    description: |
-      All Git commit messages must be written in English. 
-      Use conventional commit format if possible (e.g., feat:, fix:, chore:, docs:).
+  - id: communication_language
+    description: Giao tiếp với tôi bằng Tiếng Việt.
+    prompt: Communicate with me in Vietnamese.
+  - id: commit_language
+    description: Luôn viết commit message bằng Tiếng Anh.
+    prompt: Always write commit messages in English. Follow conventional commit format if possible.
 
   - rule: Identify core technologies.
     description: |

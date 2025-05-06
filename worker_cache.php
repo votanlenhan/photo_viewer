@@ -203,9 +203,9 @@ while ($running) {
                     $job_result_message .= " (Dừng do yêu cầu tắt worker)";
                 }
 
-                $sql_finish = "UPDATE cache_jobs SET status = ?, completed_at = ?, result_message = ? WHERE id = ?";
+                $sql_finish = "UPDATE cache_jobs SET status = ?, completed_at = ?, result_message = ?, image_count = ? WHERE id = ?";
                 $stmt_finish = $pdo->prepare($sql_finish);
-                $stmt_finish->execute([$final_status, time(), $job_result_message, $job_id]);
+                $stmt_finish->execute([$final_status, time(), $job_result_message, $files_processed, $job_id]);
                 echo "[{$timestamp}] [Job {$job_id}] Marked job as {$final_status}.\n";
                 
                 // Cập nhật last_cached_fully_at chỉ khi hoàn thành không lỗi VÀ worker không bị dừng
@@ -243,9 +243,9 @@ while ($running) {
                 
                 // Cập nhật trạng thái công việc thành 'failed' với thông báo lỗi chi tiết hơn
                 try {
-                    $sql_fail = "UPDATE cache_jobs SET status = 'failed', completed_at = ?, result_message = ? WHERE id = ?";
+                    $sql_fail = "UPDATE cache_jobs SET status = 'failed', completed_at = ?, result_message = ?, image_count = ? WHERE id = ?";
                     $stmt_fail = $pdo->prepare($sql_fail);
-                    $stmt_fail->execute([time(), $detailed_error_message, $job_id]); // Use detailed message
+                    $stmt_fail->execute([time(), $detailed_error_message, $files_processed, $job_id]);
                     echo "[{$timestamp}] [Job {$job_id}] Marked job as failed due to error.\n";
                 } catch (PDOException $pdo_e) {
                      error_log("[{$timestamp}] [Job {$job_id}] CRITICAL: Failed to mark job as failed after error: " . $pdo_e->getMessage());
