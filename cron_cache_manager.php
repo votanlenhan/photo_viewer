@@ -136,13 +136,15 @@ function cleanupOrphanedThumbnails(): void {
     $validThumbnailAbsolutePaths = [];
     foreach ($validSourcePrefixedRelativePaths as $sourcePrefixedPath) {
         // Use the source-prefixed path for hashing to ensure uniqueness across sources
-        $cacheHash = md5($sourcePrefixedPath);
-        $cacheFilename = $cacheHash . '.jpg'; // Assuming target is always jpg for thumbs
+        $cacheHash = sha1($sourcePrefixedPath);
+        // No, worker appends size before extension: sha1_size.jpg
+        // $cacheFilename = $cacheHash . '.jpg'; // WRONG
 
         foreach (THUMBNAIL_SIZES_LOCAL as $size) { // Use locally defined sizes
             $sizeDir = $cacheThumbRoot . DIRECTORY_SEPARATOR . $size;
-            // No need to mkdir here, API should create if needed, or cleanup doesn't care
-            $thumbPath = $sizeDir . DIRECTORY_SEPARATOR . $cacheFilename;
+            // Construct filename EXACTLY like the worker does
+            $thumbFilename = $cacheHash . '_' . $size . '.jpg'; 
+            $thumbPath = $sizeDir . DIRECTORY_SEPARATOR . $thumbFilename;
             $validThumbnailAbsolutePaths[$thumbPath] = true; // Store absolute path for quick lookup
         }
     }
