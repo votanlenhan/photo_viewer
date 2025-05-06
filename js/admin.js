@@ -126,13 +126,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastResultMessage = folder.latest_job_result_message;
         const folderPath = folder.path; // Get folder path
 
+        // === Lấy thông tin tiến trình ===
+        const totalFiles = folder.total_files || 0;
+        const processedFiles = folder.processed_files || 0;
+        const currentFile = folder.current_file_processing || '';
+        // === Kết thúc lấy thông tin ===
+
         let statusHTML = '';
         let title = '';
         let infoIconHTML = '';
+        let progressHTML = ''; // HTML cho progress bar
 
         if (currentJobStatus === 'processing') {
-            statusHTML = '<span class="status-processing">⚙️ Đang xử lý...</span>';
-            title = 'Worker đang tạo cache cho thư mục này.';
+            const percentage = totalFiles > 0 ? Math.round((processedFiles / totalFiles) * 100) : 0;
+            // Rút gọn tên file nếu quá dài
+            const displayFile = currentFile.length > 40 ? '...' + currentFile.slice(-37) : currentFile;
+
+            statusHTML = `<span class="status-processing">⚙️ Đang xử lý (${percentage}%)</span>`;
+            // Thêm progress bar
+            progressHTML = `<progress class="cache-progress-bar" value="${processedFiles}" max="${totalFiles}" title="${processedFiles}/${totalFiles}"></progress>`;
+            // Thêm file hiện tại (nếu có)
+            if (currentFile) {
+                statusHTML += `<br><small class="processing-file-path" title="${escapeHTML(currentFile)}">${escapeHTML(displayFile)}</small>`;
+            }
+            title = `Worker đang tạo cache (${processedFiles}/${totalFiles} file).`;
+
         } else if (currentJobStatus === 'pending') {
             statusHTML = '<span class="status-pending">🕒 Đang chờ...</span>';
             title = 'Yêu cầu cache đang chờ trong hàng đợi.';
@@ -163,8 +181,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 title = 'Chưa có cache ảnh lớn nào được tạo cho thư mục này.';
             }
         }
-        // Combine status and icon
-        return `<div title="${escapeHTML(title)}">${statusHTML} ${infoIconHTML}</div>`;
+        // Combine status, progress bar and icon
+        return `<div class="cache-status-wrapper" title="${escapeHTML(title)}">
+                    ${statusHTML}
+                    ${progressHTML}
+                    ${infoIconHTML}
+                </div>`;
     }
     // +++ END MODIFIED Function +++
 

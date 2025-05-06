@@ -115,6 +115,17 @@
 
 ## Thay đổi gần đây (Latest Changes)
 
+*   **2025-05-06 (Bạn & AI):**
+    *   Thêm cơ chế theo dõi tiến trình cache real-time vào trang Admin:
+        *   Mở rộng bảng `cache_jobs` để lưu `total_files`, `processed_files`, `current_file_processing`.
+        *   Cập nhật `worker_cache.php` để đếm tổng số file, cập nhật tiến trình (số file đã xử lý, file hiện tại) vào DB trong lúc chạy.
+        *   Cập nhật API `admin_list_folders` để trả về thông tin tiến trình.
+        *   Cập nhật `js/admin.js` và `css/style.css` để hiển thị thanh tiến trình, phần trăm hoàn thành, và file đang xử lý.
+        *   Gỡ lỗi và sửa vấn đề cập nhật tiến trình cache:
+            *   Giảm tần suất ghi vào DB của worker để tránh lỗi "database is locked".
+            *   Thêm cơ chế thử lại (retry) khi gặp lỗi "database is locked".
+            *   Sửa lỗi closure trong worker khiến biến đếm `processed_files` không được cập nhật đúng cách vào DB (sử dụng tham chiếu `&`).
+        *   Dọn dẹp các log debug không cần thiết trong `worker_cache.php` sau khi sửa lỗi thành công.
 *   **2025-05-05 (Bạn & AI):**
     *   Fix logic API (`api/actions_admin.php`) để lấy thông tin cache job chính xác cho từng thư mục, giải quyết lỗi hiển thị "Không rõ số lượng".
     *   Thêm bước kiểm tra an toàn vào script dọn dẹp cache (`cron_cache_manager.php`) để ngăn việc xóa toàn bộ cache khi không tìm thấy ảnh gốc.

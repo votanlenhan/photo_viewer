@@ -114,20 +114,48 @@ while ($running) {
             $source_key = $path_info['source_key'];
             $absolute_folder_path = $path_info['absolute_path'];
             
+            // +++ ĐẾM TỔNG SỐ FILE TRƯỚC +++
+            $total_files_in_folder = 0;
+            $allowed_ext = ALLOWED_EXTENSIONS;
+            try {
+                $counter_directory = new RecursiveDirectoryIterator($absolute_folder_path, RecursiveDirectoryIterator::SKIP_DOTS | FilesystemIterator::FOLLOW_SYMLINKS);
+                $counter_iterator = new RecursiveIteratorIterator($counter_directory, RecursiveIteratorIterator::LEAVES_ONLY);
+                foreach ($counter_iterator as $counter_fileinfo) {
+                    if ($counter_fileinfo->isFile() && $counter_fileinfo->isReadable() && in_array(strtolower($counter_fileinfo->getExtension()), $allowed_ext, true)) {
+                        $total_files_in_folder++;
+                    }
+                }
+                error_log("[{$timestamp}] [Job {$job_id}] Counted {$total_files_in_folder} processable files in '{$folder_path_param}'.");
+            } catch (Throwable $count_e) {
+                 error_log("[{$timestamp}] [Job {$job_id}] Failed to count files in '{$folder_path_param}': " . $count_e->getMessage());
+                 // Throw error to mark job as failed if counting fails?
+                 throw new Exception("Failed to pre-count files for job {$job_id}: " . $count_e->getMessage());
+            }
+            // +++ KẾT THÚC ĐẾM +++
+
+            // Cập nhật trạng thái thành 'processing' VÀ total_files
+            $sql_update_status_total = "UPDATE cache_jobs SET status = 'processing', processed_at = ?, total_files = ? WHERE id = ?";
+            $stmt_update_total = $pdo->prepare($sql_update_status_total);
+            if ($stmt_update_total->execute([time(), $total_files_in_folder, $job_id])) {
+                error_log("[{$timestamp}] [Job {$job_id}] Status updated to processing, total_files set to {$total_files_in_folder}.");
+            } else {
+                error_log("[{$timestamp}] [Job {$job_id}] FAILED to execute status/total_files update.");
+                throw new Exception("Failed to execute status/total_files update query for job {$job_id}");
+            }
+
             $created_count = 0;
             $skipped_count = 0;
             $error_count = 0;
-            $files_processed = 0;
+            $files_processed_counter = 0; // Đổi tên biến đếm cục bộ
             $job_success = true; // Assume success initially for this job
             $job_result_message = '';
-            
+
             try {
-                error_log("[{$timestamp}] [Job {$job_id}] Creating RecursiveDirectoryIterator...");
+                error_log("[{$timestamp}] [Job {$job_id}] Creating RecursiveDirectoryIterator for processing...");
                 $directory = new RecursiveDirectoryIterator($absolute_folder_path, RecursiveDirectoryIterator::SKIP_DOTS | FilesystemIterator::FOLLOW_SYMLINKS);
                 $iterator = new RecursiveIteratorIterator($directory, RecursiveIteratorIterator::LEAVES_ONLY);
                 error_log("[{$timestamp}] [Job {$job_id}] Iterator created. Starting file loop...");
-                
-                $allowed_ext = ALLOWED_EXTENSIONS; // Hằng số từ db_connect.php
+
                 // LẤY KÍCH THƯỚC LỚN NHẤT TỪ CẤU HÌNH
                 $all_configured_sizes = THUMBNAIL_SIZES; // Lấy mảng kích thước từ db_connect.php
                 if (empty($all_configured_sizes)) {
@@ -136,13 +164,77 @@ while ($running) {
                 }
                 $large_thumb_size = max($all_configured_sizes); // Chỉ lấy kích thước lớn nhất
 
+                // --- Cập nhật tiến trình lên DB --- (Helper Function)
+                $last_progress_update_time = 0; // Timestamp của lần cập nhật cuối
+                $update_interval_seconds = 7; // Cập nhật mỗi 7 giây (TĂNG LÊN TỪ 3)
+
+                $update_progress = function($current_file_path_relative = null, $force_update = false) 
+                                     use ($pdo, $job_id, &$files_processed_counter, $timestamp, &$last_progress_update_time, $update_interval_seconds) 
+                {
+                    $now = time();
+                    if ($force_update || ($now - $last_progress_update_time >= $update_interval_seconds)) {
+                        $max_retries = 3;
+                        $retry_delay_ms = 250; // 250 mili giây
+                        for ($attempt = 1; $attempt <= $max_retries; $attempt++) {
+                            try {
+                                $sql = "UPDATE cache_jobs SET processed_files = ?, current_file_processing = ? WHERE id = ?";
+                                $stmt = $pdo->prepare($sql);
+
+                                // --- REMOVED DETAILED LOGGING BEFORE EXECUTE ---
+                                // error_log("[{$timestamp}] [Job {$job_id}] UPDATE Attempt {$attempt}: Trying to set processed_files = {$files_processed_counter}, current_file = '{$current_file_path_relative}' for job_id = {$job_id}");
+                                
+                                $execute_result = $stmt->execute([$files_processed_counter, $current_file_path_relative, $job_id]);
+                                
+                                // --- REMOVED DETAILED LOGGING AFTER EXECUTE ---
+                                // error_log("[{$timestamp}] [Job {$job_id}] UPDATE Attempt {$attempt}: execute() returned: " . ($execute_result ? 'true' : 'false'));
+
+                                if ($execute_result) {
+                                    $last_progress_update_time = $now; // Cập nhật timestamp
+                                    return; // Thành công, thoát khỏi vòng lặp thử lại
+                                } else {
+                                    // --- REMOVED DETAILED LOG FOR FALSE EXECUTE ---
+                                    // error_log("[{$timestamp}] [Job {$job_id}] UPDATE Attempt {$attempt}: execute() returned false but no PDOException was thrown. Retrying if possible.");
+                                    if ($attempt < $max_retries) {
+                                        // Log lỗi nếu execute() trả về false VÀ còn lượt thử lại
+                                         error_log("[{$timestamp}] [Job {$job_id}] UPDATE Attempt {$attempt}: execute() returned false. Retrying...");
+                                        usleep($retry_delay_ms * 1000); // Chờ trước khi thử lại
+                                    } else {
+                                         // Log lỗi nếu hết lượt thử lại
+                                         error_log("[{$timestamp}] [Job {$job_id}] UPDATE Failed after {$attempt} attempts (execute returned false).");
+                                         return; // Thoát khỏi closure
+                                    }
+                                }
+
+                            } catch (PDOException $e) {
+                                // Kiểm tra lỗi "database is locked" (SQLITE_BUSY = 5)
+                                if ($e->getCode() == 5 && $attempt < $max_retries) {
+                                    error_log("[{$timestamp}] [Job {$job_id}] DB lock detected on progress update (attempt {$attempt}/{$max_retries}). Retrying in {$retry_delay_ms}ms...");
+                                    usleep($retry_delay_ms * 1000); // Chờ trước khi thử lại
+                                } else {
+                                    // Lỗi khác hoặc hết số lần thử lại
+                                    error_log("[{$timestamp}] [Job {$job_id}] Failed to update progress in DB after {$attempt} attempts (processed: {$files_processed_counter}, file: {$current_file_path_relative}): " . $e->getMessage());
+                                    // Thoát khỏi vòng lặp thử lại sau khi log lỗi cuối
+                                    return; 
+                                }
+                            }
+                        } // Kết thúc vòng lặp for (retries)
+                    }
+                };
+                // --- Kết thúc helper --- 
+
                 foreach ($iterator as $fileinfo) {
+                    if (!$running) break; // Kiểm tra shutdown trước khi xử lý file
+
                     error_log("[{$timestamp}] [Job {$job_id}] Processing item: " . $fileinfo->getPathname());
                     if ($fileinfo->isFile() && $fileinfo->isReadable() && in_array(strtolower($fileinfo->getExtension()), $allowed_ext, true)) {
-                        $files_processed++;
+                        $files_processed_counter++; // Tăng biến đếm cục bộ
                         $image_absolute_path = $fileinfo->getRealPath();
                         $image_relative_to_source = ltrim(substr($image_absolute_path, strlen(IMAGE_SOURCES[$source_key]['path'])), '\\/');
                         $image_source_prefixed_path = $source_key . '/' . str_replace('\\', '/', $image_relative_to_source);
+
+                        // +++ CẬP NHẬT TIẾN TRÌNH (THEO THỜI GIAN) +++
+                        $update_progress($image_relative_to_source); // Thử cập nhật DB (chỉ chạy nếu đủ thời gian)
+                        // +++ KẾT THÚC CẬP NHẬT +++
 
                         // CHỈ TẠO KÍCH THƯỚC LỚN:
                         $size = $large_thumb_size;
@@ -182,17 +274,23 @@ while ($running) {
                     }
                      // Check for shutdown signal periodically inside the loop if needed
                      if (function_exists('pcntl_signal_dispatch')) pcntl_signal_dispatch();
-                     if (!$running) break; // Exit inner loop if shutdown requested
+                     // if (!$running) break; // Đã kiểm tra ở đầu vòng lặp
                 } // End foreach iterator
                 error_log("[{$timestamp}] [Job {$job_id}] File loop finished.");
 
                  if (!$running) {
                      echo "[{$timestamp}] [Job {$job_id}] Shutdown requested during processing. Marking as failed.\n";
+                     // Cập nhật lần cuối trước khi throw exception
+                     $update_progress(null, true); // Ép cập nhật lần cuối, xóa file đang xử lý
                      throw new Exception("Worker shutdown requested during processing.");
                  }
 
-                $job_result_message = sprintf("Hoàn thành: %d ảnh xử lý, %d thumb tạo, %d bỏ qua, %d lỗi.", 
-                                                $files_processed, $created_count, $skipped_count, $error_count);
+                 // +++ CẬP NHẬT TIẾN TRÌNH LẦN CUỐI SAU VÒNG LẶP +++
+                 $update_progress(null, true); // Ép cập nhật lần cuối, xóa file đang xử lý
+                 // +++ KẾT THÚC CẬP NHẬT +++
+
+                $job_result_message = sprintf("Hoàn thành: %d/%d ảnh xử lý, %d thumb tạo, %d bỏ qua, %d lỗi.",
+                                                $files_processed_counter, $total_files_in_folder, $created_count, $skipped_count, $error_count);
                 echo "[{$timestamp}] [Job {$job_id}] Processing finished. Result: {$job_result_message}\n";
                 error_log("[{$timestamp}] [Job {$job_id}] Result: {$job_result_message}");
 
@@ -203,11 +301,13 @@ while ($running) {
                     $job_result_message .= " (Dừng do yêu cầu tắt worker)";
                 }
 
-                $sql_finish = "UPDATE cache_jobs SET status = ?, completed_at = ?, result_message = ?, image_count = ? WHERE id = ?";
+                // +++ Cập nhật lần cuối với status, message, image_count VÀ xóa current_file_processing +++
+                $sql_finish = "UPDATE cache_jobs SET status = ?, completed_at = ?, result_message = ?, image_count = ?, processed_files = ?, current_file_processing = NULL WHERE id = ?";
                 $stmt_finish = $pdo->prepare($sql_finish);
-                $stmt_finish->execute([$final_status, time(), $job_result_message, $files_processed, $job_id]);
+                // Dùng $files_processed_counter thay vì $files_processed (không còn tồn tại)
+                $stmt_finish->execute([$final_status, time(), $job_result_message, $files_processed_counter, $files_processed_counter, $job_id]); 
                 echo "[{$timestamp}] [Job {$job_id}] Marked job as {$final_status}.\n";
-                
+
                 // Cập nhật last_cached_fully_at chỉ khi hoàn thành không lỗi VÀ worker không bị dừng
                 if ($final_status === 'completed') {
                     try {
@@ -234,18 +334,19 @@ while ($running) {
                 $timestamp = date('Y-m-d H:i:s');
                 $base_error_message = "Error processing job {$job_id} for '{$folder_path_param}': " . $e->getMessage();
                  // Cố gắng thêm số liệu vào thông báo lỗi
-                $detailed_error_message = sprintf("%s | Đã xử lý: %d, Tạo: %d, Bỏ qua: %d, Lỗi ảnh: %d.",
-                                                $base_error_message, $files_processed, $created_count, $skipped_count, $error_count);
+                $detailed_error_message = sprintf("%s | Đã xử lý: %d/%d, Tạo: %d, Bỏ qua: %d, Lỗi ảnh: %d.",
+                                                $base_error_message, $files_processed_counter, $total_files_in_folder, $created_count, $skipped_count, $error_count);
                 
                 echo "[{$timestamp}] [Job {$job_id}] {$base_error_message}\n"; // Log lỗi gốc ngắn gọn ra console
                 error_log("[{$timestamp}] [Job {$job_id}] {$detailed_error_message}"); // Log lỗi chi tiết hơn vào file
                 error_log("[{$timestamp}] [Job {$job_id}] Stack Trace: \n" . $e->getTraceAsString());
                 
-                // Cập nhật trạng thái công việc thành 'failed' với thông báo lỗi chi tiết hơn
+                // Cập nhật trạng thái công việc thành 'failed' với thông báo lỗi chi tiết hơn và xóa current_file
                 try {
-                    $sql_fail = "UPDATE cache_jobs SET status = 'failed', completed_at = ?, result_message = ?, image_count = ? WHERE id = ?";
+                    $sql_fail = "UPDATE cache_jobs SET status = 'failed', completed_at = ?, result_message = ?, image_count = ?, processed_files = ?, current_file_processing = NULL WHERE id = ?";
                     $stmt_fail = $pdo->prepare($sql_fail);
-                    $stmt_fail->execute([time(), $detailed_error_message, $files_processed, $job_id]);
+                    // Dùng $files_processed_counter
+                    $stmt_fail->execute([time(), $detailed_error_message, $files_processed_counter, $files_processed_counter, $job_id]); 
                     echo "[{$timestamp}] [Job {$job_id}] Marked job as failed due to error.\n";
                 } catch (PDOException $pdo_e) {
                      error_log("[{$timestamp}] [Job {$job_id}] CRITICAL: Failed to mark job as failed after error: " . $pdo_e->getMessage());

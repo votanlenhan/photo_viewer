@@ -158,8 +158,21 @@ try {
         $pdo->exec("CREATE TABLE IF NOT EXISTS folder_passwords (\r\n            folder_name TEXT PRIMARY KEY,\r\n            password_hash TEXT NOT NULL\r\n        )");
 
         // Create cache_jobs table (NEW)
-        $pdo->exec("CREATE TABLE IF NOT EXISTS cache_jobs (\r\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n            folder_path TEXT NOT NULL,\r\n            status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'processing', 'completed', 'failed'\r\n            created_at INTEGER NOT NULL,\r\n            processed_at INTEGER NULL,\r\n            completed_at INTEGER NULL,\r\n            result_message TEXT NULL,\r\n            image_count INTEGER DEFAULT NULL,\r\n            UNIQUE(folder_path, created_at)\r\n        )");
-        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cache_jobs_status_created ON cache_jobs (status, created_at)");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS cache_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            folder_path TEXT NOT NULL UNIQUE, -- Đường dẫn có tiền tố nguồn (ví dụ: main/album1)
+            status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, completed, failed
+            created_at INTEGER NOT NULL,      -- Timestamp khi job được tạo
+            processed_at INTEGER DEFAULT NULL,  -- Timestamp khi worker bắt đầu xử lý
+            completed_at INTEGER DEFAULT NULL, -- Timestamp khi worker hoàn thành/lỗi
+            result_message TEXT DEFAULT NULL,   -- Thông báo kết quả từ worker
+            image_count INTEGER DEFAULT NULL,    -- Số lượng ảnh worker xử lý trong lần chạy cuối
+            total_files INTEGER DEFAULT 0,     -- Tổng số file ảnh cần xử lý cho job này
+            processed_files INTEGER DEFAULT 0, -- Số file ảnh đã xử lý
+            current_file_processing TEXT DEFAULT NULL -- Đường dẫn file đang xử lý
+        )");
+        // Tạo index cho status và folder_path để tăng tốc truy vấn của worker và API
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cache_jobs_status ON cache_jobs (status)");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cache_jobs_folder_path ON cache_jobs (folder_path)");
 
         // +++ Add last_cached_fully_at column if it doesn't exist (SQLite specific) +++

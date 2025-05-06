@@ -1441,3 +1441,75 @@ main.container {
     color: #d29922;
     border-color: rgba(210, 153, 34, 0.3);
 }
+
+.admin-view td[data-label="Trạng thái Cache"] .cache-status-wrapper {
+    /* Container for status, progress, icon */
+    line-height: 1.3;
+}
+
+.admin-view td[data-label="Trạng thái Cache"] .status-processing {
+    /* Style the processing text */
+    font-weight: bold;
+}
+
+.admin-view td[data-label="Trạng thái Cache"] .processing-file-path {
+    /* Style the current file path */
+    display: block; /* Make it appear on a new line */
+    font-size: 0.85em;
+    color: #8b949e;
+    margin-top: 3px;
+    white-space: nowrap; /* Prevent wrapping of the potentially truncated path */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.admin-view td[data-label="Trạng thái Cache"] .cache-progress-bar {
+    /* Style the progress bar */
+    display: block; /* Make it full width of the cell */
+    width: 100%;
+    height: 8px; /* Adjust height */
+    margin-top: 5px;
+    border-radius: 4px;
+    border: 1px solid #30363d; /* Add a subtle border */
+    background-color: #0d1117; /* Background of the track */
+}
+
+/* Style the progress bar value (filled part) */
+.admin-view td[data-label="Trạng thái Cache"] .cache-progress-bar::-webkit-progress-value {
+    background-color: #238636; /* Green progress */
+    border-radius: 3px;
+    transition: width 0.2s ease-in-out;
+}
+.admin-view td[data-label="Trạng thái Cache"] .cache-progress-bar::-moz-progress-bar {
+    background-color: #238636;
+    border-radius: 3px;
+    transition: width 0.2s ease-in-out;
+}
+
+/* Style the progress bar background (track) */
+.admin-view td[data-label="Trạng thái Cache"] .cache-progress-bar::-webkit-progress-bar {
+    background-color: #0d1117;
+    border-radius: 4px;
+}
+
+/* Remove default appearance for consistency */
+.admin-view td[data-label="Trạng thái Cache"] .cache-progress-bar {
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.admin-view td[data-label="Trạng thái Cache"] .cache-info-icon {
+     /* Ensure icon is aligned nicely with text/progress */
+     vertical-align: middle; 
+}
+
+/* Optional: Adjust mobile styles if progress bar makes cell too crowded */
+@media (max-width: 800px) {
+    .admin-view table td[data-label="Trạng thái Cache"] .processing-file-path {
+         font-size: 0.8em; /* Slightly smaller on mobile */
+         text-align: right; /* Match other mobile content */
+    }
+    .admin-view table td[data-label="Trạng thái Cache"] .cache-progress-bar {
+         height: 6px; /* Slightly thinner on mobile */
+    }
+}

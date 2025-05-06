@@ -97,10 +97,18 @@ switch ($action) {
             // +++ NEW: Fetch active cache job statuses +++
             $active_cache_jobs = [];
             try {
-                 $sql_jobs = "SELECT folder_path, status FROM cache_jobs WHERE status IN ('pending', 'processing')";
+                 // Lấy thêm các trường tiến trình
+                 $sql_jobs = "SELECT folder_path, status, total_files, processed_files, current_file_processing 
+                              FROM cache_jobs 
+                              WHERE status IN ('pending', 'processing')";
                  $stmt_jobs = $pdo->query($sql_jobs);
                  while ($job_row = $stmt_jobs->fetch(PDO::FETCH_ASSOC)) {
-                     $active_cache_jobs[$job_row['folder_path']] = $job_row['status'];
+                     $active_cache_jobs[$job_row['folder_path']] = [
+                         'status' => $job_row['status'],
+                         'total_files' => (int)$job_row['total_files'],
+                         'processed_files' => (int)$job_row['processed_files'],
+                         'current_file' => $job_row['current_file_processing']
+                     ];
                  }
             } catch (PDOException $e) {
                  error_log("ERROR fetching active cache job statuses for admin: " . $e->getMessage());
@@ -152,12 +160,17 @@ switch ($action) {
                                 'message' => null,
                                 'image_count' => null,
                                 'created_at' => null,
-                                'status' => null
+                                'status' => null,
+                                'total_files' => 0,       // Default value
+                                'processed_files' => 0, // Default value
+                                'current_file' => null  // Default value
                             ];
 
-                            // ---> FETCH LATEST JOB INFO INSIDE LOOP <---
+                            // ---> FETCH LATEST JOB INFO INSIDE LOOP <--- (Including progress fields)
                             try {
-                                $sql_latest_job = "SELECT cj.result_message, cj.image_count, cj.created_at, cj.status 
+                                // Lấy thêm các trường tiến trình từ job gần nhất (bất kể status)
+                                $sql_latest_job = "SELECT cj.result_message, cj.image_count, cj.created_at, cj.status, 
+                                                       cj.total_files, cj.processed_files, cj.current_file_processing
                                                     FROM cache_jobs cj 
                                                     WHERE cj.folder_path = ? 
                                                     ORDER BY cj.id DESC 
@@ -170,6 +183,11 @@ switch ($action) {
                                     $latest_job_info['image_count'] = $job_row['image_count'] ? (int)$job_row['image_count'] : null;
                                     $latest_job_info['created_at'] = $job_row['created_at'];
                                     $latest_job_info['status'] = $job_row['status'];
+                                    // Lấy thông tin tiến trình từ job gần nhất
+                                    $latest_job_info['total_files'] = (int)$job_row['total_files'];
+                                    $latest_job_info['processed_files'] = (int)$job_row['processed_files'];
+                                    // Chỉ lấy current_file nếu job đó đang processing (vì nó được xóa khi hoàn thành/lỗi)
+                                    $latest_job_info['current_file'] = ($job_row['status'] === 'processing') ? $job_row['current_file_processing'] : null;
                                 }
                             } catch (PDOException $e_job) {
                                  error_log("[admin_list_folders] Error fetching latest job info for {$source_prefixed_path}: " . $e_job->getMessage());
@@ -202,6 +220,10 @@ switch ($action) {
                                  $last_cached_image_count = $latest_job_info['image_count'];
                             }
                            
+                            $current_job_status = $active_cache_jobs[$source_prefixed_path]['status'] ?? null;
+                            // Lấy thông tin tiến trình từ active job nếu có, nếu không thì từ job gần nhất
+                            $progress_info = $active_cache_jobs[$source_prefixed_path] ?? $latest_job_info;
+
                             // Add folder data ONLY if it meets the criteria
                             $folders_data[] = [
                                 'name' => $dir_name,
@@ -211,10 +233,14 @@ switch ($action) {
                                 'views' => (int)($stats['views'] ?? 0),
                                 'zip_downloads' => (int)($stats['downloads'] ?? 0),
                                 'last_cached_fully_at' => $stats['last_cached_fully_at'] ? (int)$stats['last_cached_fully_at'] : null,
-                                'current_cache_job_status' => $active_cache_jobs[$source_prefixed_path] ?? null,
+                                'current_cache_job_status' => $current_job_status,
                                 'latest_job_result_message' => $latest_job_info['message'],
-                                'last_cached_image_count' => $last_cached_image_count ? (int)$last_cached_image_count : null, // Ensure integer or null
-                                'latest_job_status' => $latest_job_info['status'] // Add job status
+                                'last_cached_image_count' => $last_cached_image_count ? (int)$last_cached_image_count : null,
+                                'latest_job_status' => $latest_job_info['status'], // Add job status
+                                // Thêm các trường tiến trình vào response
+                                'total_files' => (int)$progress_info['total_files'],
+                                'processed_files' => (int)$progress_info['processed_files'],
+                                'current_file_processing' => $current_job_status === 'processing' ? $progress_info['current_file'] : null // Chỉ gửi file hiện tại nếu đang processing
                             ];
                         }
                     }
