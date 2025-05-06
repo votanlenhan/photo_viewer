@@ -115,11 +115,23 @@ function cleanupOrphanedThumbnails(): void {
 
     // Get all valid source-prefixed relative paths
     $validSourcePrefixedRelativePaths = findAllValidSourcePrefixedRelativePaths();
+
+    // +++ SAFETY CHECK +++
+    // If no valid source images were found (due to config error, unmounted drives, etc.),
+    // ABORT the cleanup to prevent deleting ALL thumbnails.
     if (empty($validSourcePrefixedRelativePaths)) {
-        echo "[Cron Cleanup] No valid original images found across all sources in IMAGE_SOURCES. Potentially cleaning all thumbnails.\n";
-    } else {
-         echo "[Info] Found a total of " . count($validSourcePrefixedRelativePaths) . " valid images across all sources.\n";
+        $errorMsg = "[Cron Cleanup CRITICAL] No valid source images found. Aborting cleanup to prevent deleting all thumbnails. Check IMAGE_SOURCES configuration, paths, and permissions.";
+        error_log($errorMsg);
+        echo $errorMsg . "\n";
+        // Optionally, you might want to exit the entire script here too:
+        // exit(1); 
+        // For now, just exiting the cleanup function.
+        echo "Orphaned thumbnail cleanup aborted due to safety check.\n";
+        return; // Exit the function
     }
+    // --- END SAFETY CHECK ---
+
+    echo "[Info] Found a total of " . count($validSourcePrefixedRelativePaths) . " valid images across all sources.\n";
 
     $validThumbnailAbsolutePaths = [];
     foreach ($validSourcePrefixedRelativePaths as $sourcePrefixedPath) {

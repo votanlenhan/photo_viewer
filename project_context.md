@@ -39,8 +39,11 @@
     *   `images/`: Thư mục nguồn ảnh mặc định (có thể thay đổi/thêm trong `config.php`).
     *   `logs/`: Thư mục chứa file log ứng dụng.
 *   **Tác vụ nền (Cron/Scheduled Tasks):**
-    *   `cron_cache_manager.php`: Dọn dẹp thumbnail cũ/mồ côi.
-    *   `cron_log_cleaner.php`: Xoay vòng/xóa file log cũ.
+    *   `worker_cache.php`: Script chạy nền (worker) để xử lý các yêu cầu tạo thumbnail kích thước lớn một cách bất đồng bộ. Lấy các job từ bảng `cache_jobs`.
+    *   `cron_cache_manager.php`: Script chạy theo lịch (cron job) để:
+        *   Dọn dẹp các file thumbnail "mồ côi" (không có ảnh gốc tương ứng) trong thư mục cache.
+        *   **Quan trọng:** Đã thêm bước kiểm tra an toàn để ngăn chặn việc xóa toàn bộ cache nếu script không tìm thấy bất kỳ file ảnh gốc hợp lệ nào (do lỗi cấu hình, thư mục nguồn bị ngắt kết nối, v.v.).
+    *   `cron_log_cleaner.php`: Script chạy theo lịch để dọn dẹp các file log cũ.
     *   `run_cache_cleanup.bat`: Ví dụ file batch để chạy các script cron trên Windows.
 
 ## 4. Luồng hoạt động & Khái niệm chính
@@ -108,4 +111,12 @@
 *   Tiếp tục tập trung vào nguyên tắc thiết kế **Mobile-First**.
 *   Đảm bảo tính nhất quán giữa môi trường phát triển (dev) và sản xuất (prod), đặc biệt về cấu hình đường dẫn trong `config.php`.
 *   Ưu tiên các **tối ưu về hiệu suất** vì chúng ảnh hưởng lớn đến trải nghiệm người dùng.
-*   Cần **kiểm thử kỹ lưỡng** tất cả chức năng sau các thay đổi. 
+*   Cần **kiểm thử kỹ lưỡng** tất cả chức năng sau các thay đổi.
+
+## Thay đổi gần đây (Latest Changes)
+
+*   **2025-05-05 (Bạn & AI):**
+    *   Fix logic API (`api/actions_admin.php`) để lấy thông tin cache job chính xác cho từng thư mục, giải quyết lỗi hiển thị "Không rõ số lượng".
+    *   Thêm bước kiểm tra an toàn vào script dọn dẹp cache (`cron_cache_manager.php`) để ngăn việc xóa toàn bộ cache khi không tìm thấy ảnh gốc.
+*   **Trước đó:**
+    *   Thêm cột `image_count` vào DB, sửa worker để lưu số lượng ảnh cache. 
