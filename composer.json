@@ -1,8 +1,17 @@
 {
+    "name": "lucas/htdocs",
+    "autoload": {
+        "psr-4": {
+            "Lucas\\Htdocs\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Lucas Vo",
+            "email": "votanlenhan@gmail.com"
+        }
+    ],
     "require-dev": {
-        "codeception/codeception": "^5.0",
-        "codeception/module-webdriver": "^4.0",
-        "codeception/module-asserts": "^3.0",
-        "codeception/module-phpbrowser": "*"
+        "phpunit/phpunit": "^11.5"
     }
 }

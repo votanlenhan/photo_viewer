@@ -48,7 +48,10 @@ export function openPhotoSwipeAtIndex(index) {
 export function isPhotoSwipeActive() {
     // photoswipeLightbox is the PhotoSwipeLightbox instance from state
     // photoswipeLightbox.pswp is the actual PhotoSwipe gallery instance (if initialized and open)
-    return photoswipeLightbox && photoswipeLightbox.pswp && photoswipeLightbox.pswp.isOpen;
+    if (!photoswipeLightbox || !photoswipeLightbox.pswp) {
+        return false;
+    }
+    return !!photoswipeLightbox.pswp.isOpen;
 }
 
 export function closePhotoSwipeIfActive() {

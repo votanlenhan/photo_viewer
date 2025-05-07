@@ -46,13 +46,31 @@ function json_error($msg, $code = 400)
 }
 
 /**
+ * Chuẩn hóa và làm sạch đường dẫn đầu vào (loại bỏ .., \, null bytes, dấu / dư thừa).
+ */
+function normalize_path_input(?string $path): string
+{
+    if ($path === null) {
+        return '';
+    }
+    // 1. Thay thế \\ bằng /
+    $normalized = str_replace('\\', '/', $path);
+    // 2. Loại bỏ .. và null byte (để đơn giản và an toàn)
+    $normalized = str_replace(['..', "\0"], '', $normalized);
+    // 3. Loại bỏ các dấu / lặp lại
+    $normalized = preg_replace('#/+#', '/', $normalized);
+    // 4. Loại bỏ dấu / ở đầu và cuối
+    return trim($normalized, '/');
+}
+
+/**
  * Làm sạch, xác thực đường dẫn thư mục con và trả về thông tin nguồn.
  * Accepts a source-prefixed relative path (e.g., "main/album/sub" or "extra_drive/stuff").
  * Returns null if invalid, or an array ['source_key', 'relative_path', 'absolute_path', 'source_prefixed_path', 'is_root' => bool] on success.
  * The returned 'relative_path' is relative to the source's base path.
  * SECURITY: Crucial for preventing path traversal.
  */
-function validate_source_and_path($source_prefixed_path)
+function validate_source_and_path(?string $source_prefixed_path)
 {
     // Access constant directly
     if (!defined('IMAGE_SOURCES')) {
@@ -60,19 +78,16 @@ function validate_source_and_path($source_prefixed_path)
         return null;
     }
 
-    if ($source_prefixed_path === null || $source_prefixed_path === '' || $source_prefixed_path === '/') {
+    $normalized_input = normalize_path_input($source_prefixed_path);
+
+    if ($normalized_input === '') {
         return ['source_key' => null, 'relative_path' => '', 'absolute_path' => null, 'source_prefixed_path' => '', 'is_root' => true];
     }
 
-    // 1. Normalize and split
-    $normalized_path = trim(str_replace(['..', '\\', "\0"], '', $source_prefixed_path), '/');
-    if ($normalized_path === '') {
-        return ['source_key' => null, 'relative_path' => '', 'absolute_path' => null, 'source_prefixed_path' => '', 'is_root' => true]; // Treat as root if becomes empty after normalization
-    }
-    $normalized_path = str_replace(DIRECTORY_SEPARATOR, '/', $normalized_path);
-    $parts = explode('/', $normalized_path, 2);
+    // 1. Split normalized path
+    $parts = explode('/', $normalized_input, 2);
     $source_key = $parts[0];
-    $relative_path_in_source = $parts[1] ?? '';
+    $relative_path_in_source = $parts[1] ?? ''; // Đã được chuẩn hóa bởi normalize_path_input
 
     // 2. Check source key existence
     if (!isset(IMAGE_SOURCES[$source_key])) {
@@ -137,7 +152,7 @@ function validate_source_and_path($source_prefixed_path)
  * @param string $source_prefixed_path e.g., "main/album/image.jpg"
  * @return array|null ['source_key', 'relative_path', 'absolute_path', 'source_prefixed_path'] or null if invalid.
  */
-function validate_source_and_file_path($source_prefixed_path)
+function validate_source_and_file_path(?string $source_prefixed_path)
 {
     // Access constant directly
     if (!defined('IMAGE_SOURCES')) {
@@ -145,21 +160,17 @@ function validate_source_and_file_path($source_prefixed_path)
         return null;
     }
 
-    if ($source_prefixed_path === null || $source_prefixed_path === '' || $source_prefixed_path === '/') {
-        error_log("File validation failed: Path cannot be empty or root.");
-        return null; // Cannot validate root or empty path as a file
-    }
+    $normalized_input = normalize_path_input($source_prefixed_path);
 
-    // 1. Normalize and split
-    $normalized_path = trim(str_replace(['..', '\\', "\0"], '', $source_prefixed_path), '/');
-    if ($normalized_path === '') {
+    if ($normalized_input === '') {
         error_log("File validation failed: Normalized path is empty.");
         return null;
     }
-    $normalized_path = str_replace(DIRECTORY_SEPARATOR, '/', $normalized_path);
-    $parts = explode('/', $normalized_path, 2);
+
+    // 1. Split normalized path
+    $parts = explode('/', $normalized_input, 2);
     $source_key = $parts[0];
-    $relative_path_in_source = $parts[1] ?? '';
+    $relative_path_in_source = $parts[1] ?? ''; // Đã được chuẩn hóa
 
     if ($relative_path_in_source === '') {
         error_log("File validation failed: Path refers only to a source key, not a file: {$source_prefixed_path}");
