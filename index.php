@@ -88,15 +88,15 @@
     <!-- PhotoSwipe JS module will be imported *within* app.js -->
     <script type="module" src="js/app.js"></script> 
 
-    <!-- ADDED: Zip Progress Overlay -->
-    <div id="zip-progress-overlay" class="modal-overlay" >
-        <!-- Add modal-box and keep specific class -->
-        <div class="modal-box zip-progress-box">
-            <div class="spinner"></div>
-            <p id="zip-progress-message">Đang chuẩn bị file ZIP...</p>
-            <button id="cancel-zip-button" class="button">Hủy bỏ</button>
-        </div>
+    <!-- REPLACED: Zip Progress Section (Replaces old overlay) -->
+    <!-- ZIP Progress Bar -->
+    <div id="zip-progress-bar-container" class="zip-progress-bar-container" style="display: none;">
+        <p class="zip-folder-info">Đang tạo ZIP: <span id="zip-folder-name-progress" class="zip-folder-name"></span></p>
+        <progress id="zip-overall-progress" value="0" max="100"></progress>
+        <p id="zip-progress-stats-text" class="zip-progress-stats">0/0 files (0%)</p>
+        <!-- <button id="zip-progress-cancel-btn" class="zip-progress-cancel-btn" title="Hủy">×</button> -->
     </div>
+    <!-- END ZIP Progress Bar -->
 
 </body>
 </html>

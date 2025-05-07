@@ -11,6 +11,26 @@ if (!isset($action)) {
     die('Invalid access.');
 }
 
+// Helper function to generate a unique token
+if (!function_exists('generate_job_token')) {
+    function generate_job_token($length = 32) {
+        if (function_exists('random_bytes')) {
+            return bin2hex(random_bytes($length / 2));
+        } elseif (function_exists('openssl_random_pseudo_bytes')) {
+            return bin2hex(openssl_random_pseudo_bytes($length / 2));
+        } else {
+            // Fallback for older PHP versions (less secure)
+            $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            $charactersLength = strlen($characters);
+            $randomString = '';
+            for ($i = 0; $i < $length; $i++) {
+                $randomString .= $characters[rand(0, $charactersLength - 1)];
+            }
+            return $randomString . uniqid(); // Add uniqid for more uniqueness
+        }
+    }
+}
+
 switch ($action) {
 
     case 'list_files':
@@ -249,8 +269,230 @@ switch ($action) {
                 'total_pages' => $total_pages,
                 'total_items' => $total_items
             ],
-            'is_root' => false
+            'is_root' => false,
+            'is_search' => (bool)$search_term, // Add is_search flag
+            'current_search_term' => $search_term // Add current search term
         ]);
+        break;
+
+    case 'request_zip':
+        $folder_to_zip = $_POST['path'] ?? ''; // Expect path via POST
+
+        if (empty($folder_to_zip)) {
+            json_error('Đường dẫn thư mục không được cung cấp.', 400);
+        }
+
+        $path_info = validate_source_and_path($folder_to_zip);
+        if (!$path_info || $path_info['is_root']) {
+            json_error('Đường dẫn thư mục không hợp lệ hoặc là thư mục gốc.', 400);
+        }
+
+        $current_source_prefixed_path = $path_info['source_prefixed_path'];
+        $access = check_folder_access($current_source_prefixed_path);
+        if (!$access['authorized']) {
+            json_error($access['error'] ?? 'Không có quyền truy cập thư mục này để tạo ZIP.', $access['password_required'] ? 401 : 403);
+        }
+
+        // Check if a recent, non-failed job for this path already exists to avoid duplicates
+        try {
+            // Priority 1: Check for ANY existing 'pending' or 'processing' job for this source_path
+            $stmt_check_active = $pdo->prepare("SELECT job_token, status FROM zip_jobs WHERE source_path = ? AND status IN ('pending', 'processing') ORDER BY created_at DESC LIMIT 1");
+            $stmt_check_active->execute([$current_source_prefixed_path]);
+            $active_job = $stmt_check_active->fetch(PDO::FETCH_ASSOC);
+
+            if ($active_job) {
+                // If an active job (pending/processing) exists, always return its info
+                json_response([
+                    'message' => 'Một yêu cầu tạo ZIP cho thư mục này đã tồn tại và đang được xử lý hoặc chờ xử lý.',
+                    'job_token' => $active_job['job_token'],
+                    'status' => $active_job['status']
+                ], 202); // 202 Accepted, client should poll this token
+                return; // Exit early
+            }
+
+            // Priority 2: Check for a RECENT 'completed' job (within 5 minutes) whose file still exists
+            $stmt_check_completed = $pdo->prepare("SELECT job_token, status, zip_filename FROM zip_jobs WHERE source_path = ? AND status = 'completed' AND created_at > datetime('now', '-5 minutes') ORDER BY created_at DESC LIMIT 1");
+            $stmt_check_completed->execute([$current_source_prefixed_path]);
+            $completed_job = $stmt_check_completed->fetch(PDO::FETCH_ASSOC);
+
+            if ($completed_job && !empty($completed_job['zip_filename'])) {
+                if (!defined('ZIP_CACHE_DIR_API_REQ')) {
+                    define('ZIP_CACHE_DIR_API_REQ', __DIR__ . '/../cache/zips/');
+                }
+                $existing_zip_filepath = realpath(ZIP_CACHE_DIR_API_REQ . $completed_job['zip_filename']);
+                
+                if ($existing_zip_filepath && is_file($existing_zip_filepath)) {
+                    json_response([
+                        'message' => 'Một file ZIP đã được tạo gần đây cho thư mục này và vẫn tồn tại.',
+                        'job_token' => $completed_job['job_token'],
+                        'status' => 'completed',
+                        'zip_filename' => $completed_job['zip_filename']
+                    ], 200); // OK, file is ready
+                    return; // Exit early
+                } else {
+                    error_log("[API request_zip] Recent completed job found (token: {$completed_job['job_token']}), but physical file '{$completed_job['zip_filename']}' is missing. Proceeding to create new job.");
+                }
+            }
+            // If no active job, and no recent valid completed job, proceed to create a new one.
+
+        } catch (PDOException $e) {
+            error_log("API Error (request_zip - check existing): " . $e->getMessage());
+            // Don't fail the request, just proceed to create a new job if check fails
+        }
+
+
+        $job_token = generate_job_token();
+
+        try {
+            $sql = "INSERT INTO zip_jobs (source_path, job_token, status) VALUES (?, ?, 'pending')";
+            $stmt = $pdo->prepare($sql);
+            if ($stmt->execute([$current_source_prefixed_path, $job_token])) {
+                json_response([
+                    'message' => 'Yêu cầu tạo ZIP đã được nhận. Quá trình sẽ bắt đầu sớm.',
+                    'job_token' => $job_token
+                ], 202); // 202 Accepted
+            } else {
+                json_error('Không thể tạo yêu cầu ZIP trong cơ sở dữ liệu.', 500);
+            }
+        } catch (PDOException $e) {
+            error_log("API Error (request_zip - insert new): " . $e->getMessage());
+            // Check for unique constraint violation on job_token (highly unlikely but good practice)
+            if (strpos($e->getMessage(), 'UNIQUE constraint failed: zip_jobs.job_token') !== false) {
+                 json_error('Lỗi tạo mã định danh công việc duy nhất. Vui lòng thử lại.', 500);
+            } else {
+                 json_error('Lỗi máy chủ khi tạo yêu cầu ZIP.', 500);
+            }
+        }
+        break;
+
+    case 'get_zip_status':
+        $job_token = $_GET['token'] ?? '';
+        if (empty($job_token)) {
+            json_error('Job token không được cung cấp.', 400);
+        }
+
+        try {
+            $stmt = $pdo->prepare("SELECT job_token, source_path, status, total_files, processed_files, current_file_processing, zip_filename, zip_filesize, error_message, created_at, updated_at FROM zip_jobs WHERE job_token = ?");
+            $stmt->execute([$job_token]);
+            $job_details = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($job_details) {
+                // Ensure path is still accessible by current user for status check too? (Optional, adds overhead)
+                // $path_info_status = validate_source_and_path($job_details['source_path']);
+                // $access_status = check_folder_access($job_details['source_path']);
+                // if (!$access_status['authorized']) {
+                //     json_error('Không có quyền xem trạng thái cho công việc này.', 403);
+                // }
+                json_response($job_details, 200);
+            } else {
+                json_error('Không tìm thấy công việc ZIP với token được cung cấp.', 404);
+            }
+        } catch (PDOException $e) {
+            error_log("API Error (get_zip_status): " . $e->getMessage());
+            json_error('Lỗi máy chủ khi truy vấn trạng thái ZIP.', 500);
+        }
+        break;
+
+    case 'download_final_zip':
+        $job_token = $_GET['token'] ?? '';
+        error_log("[API download_final_zip] Received token: " . $job_token);
+
+        if (empty($job_token)) {
+            json_error('Job token không được cung cấp để tải về.', 400);
+        }
+
+        define('ZIP_CACHE_DIR_API', __DIR__ . '/../cache/zips/'); // Path relative to api/actions_public.php
+        error_log("[API download_final_zip] ZIP_CACHE_DIR_API defined as: " . ZIP_CACHE_DIR_API);
+
+        try {
+            $stmt = $pdo->prepare("SELECT source_path, status, zip_filename FROM zip_jobs WHERE job_token = ?");
+            $stmt->execute([$job_token]);
+            $job = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$job) {
+                error_log("[API download_final_zip] Job not found for token: " . $job_token);
+                json_error('Không tìm thấy công việc ZIP.', 404);
+                return; 
+            }
+            error_log("[API download_final_zip] Job details: " . print_r($job, true));
+
+            if ($job['status'] !== 'completed' || empty($job['zip_filename'])) {
+                error_log("[API download_final_zip] Job not completed or zip_filename empty. Status: " . $job['status'] . ", Filename: " . $job['zip_filename']);
+                json_error('File ZIP chưa sẵn sàng hoặc đã xảy ra lỗi trong quá trình tạo.', 409); // 409 Conflict
+                return;
+            }
+            
+            $path_info_dl = validate_source_and_path($job['source_path']);
+            if (!$path_info_dl || $path_info_dl['is_root']) { 
+                error_log("[API download_final_zip] Invalid original path for ZIP: " . $job['source_path']);
+                json_error('Đường dẫn gốc của file ZIP không hợp lệ.', 403);
+                return;
+            }
+            $access_dl = check_folder_access($path_info_dl['source_prefixed_path']);
+            if (!$access_dl['authorized']) {
+                error_log("[API download_final_zip] Access denied for original path: " . $job['source_path']);
+                json_error('Không có quyền tải file ZIP này.', $access_dl['password_required'] ? 401 : 403);
+                return;
+            }
+
+            $zip_filename_from_db = $job['zip_filename'];
+            $zip_filepath = realpath(ZIP_CACHE_DIR_API . $zip_filename_from_db);
+            error_log("[API download_final_zip] Attempting to serve file. DB Filename: '{$zip_filename_from_db}', Resolved Path: '" . ($zip_filepath ?: 'false (realpath failed)') . "'");
+
+            if ($zip_filepath && is_file($zip_filepath) && is_readable($zip_filepath)) {
+                error_log("[API download_final_zip] File found and readable: {$zip_filepath}. Sending headers.");
+                if (ob_get_level() > 0) {
+                    ob_end_clean(); // Clean any existing output buffer
+                }
+
+                // Set headers
+                header('Content-Description: File Transfer');
+                header('Content-Type: application/zip');
+                header('Content-Disposition: attachment; filename="' . basename($zip_filename_from_db) . '"');
+                header('Expires: 0');
+                header('Cache-Control: must-revalidate');
+                header('Pragma: public');
+                header('Content-Length: ' . filesize($zip_filepath));
+                // Prevent PHP from timing out during large file download
+                set_time_limit(0);
+                
+                error_log("[API download_final_zip] Headers sent. Starting chunked readfile for: {$zip_filepath}");
+
+                // Stream the file in chunks
+                $file_handle = fopen($zip_filepath, 'rb'); // Open in binary read mode
+                if (!$file_handle) {
+                    error_log("[API download_final_zip] Failed to open file for reading: {$zip_filepath}");
+                    // We can't use json_error here as headers are already sent.
+                    // The client will likely receive an incomplete or corrupted download.
+                    http_response_code(500);
+                    exit;
+                }
+
+                $bytes_sent = 0;
+                while (!feof($file_handle) && connection_status() === CONNECTION_NORMAL) {
+                    // Read 8KB chunks (or adjust chunk size as needed)
+                    print(fread($file_handle, 8192));
+                    flush(); // Flush PHP output buffer to the browser
+                    if (ob_get_level() > 0) { // Ensure outer buffers are flushed too if any
+                        ob_flush();
+                    }
+                    $bytes_sent += 8192; // Approximate, actual read might be less at EOF
+                }
+                fclose($file_handle);
+                error_log("[API download_final_zip] Finished streaming file. Approximate bytes handled by loop: {$bytes_sent}");
+                exit;
+            } else {
+                error_log("[API download_final_zip] File NOT found or NOT readable. Resolved Path: '" . ($zip_filepath ?: 'false') . "'. is_file: " . (is_file($zip_filepath) ? 'yes' : 'no') . ", is_readable: " . (is_readable($zip_filepath) ? 'yes' : 'no'));
+                json_error('File ZIP không tìm thấy trên máy chủ hoặc không thể đọc được.', 404);
+            }
+
+        } catch (PDOException $e) {
+            error_log("API Error (download_final_zip - PDO): " . $e->getMessage());
+            json_error('Lỗi cơ sở dữ liệu khi cố gắng tải file ZIP.', 500);
+        } catch (Throwable $e) {
+            error_log("API Error (download_final_zip - General): " . $e->getMessage());
+            json_error('Lỗi không xác định khi cố gắng tải file ZIP.', 500);
+        }
         break;
 
     case 'get_thumbnail':
@@ -407,115 +649,6 @@ switch ($action) {
         exit;
         break;
 
-    case 'download_zip':
-        // error_log("--- Reached download_zip action ---"); // <<< XÓA LOG
-        $folder_to_zip = $_GET['path'] ?? null;
-        // error_log("download_zip: Received path parameter: " . print_r($folder_to_zip, true)); // <<< XÓA LOG
-
-        if ($folder_to_zip === null) {
-            json_error('Thiếu tham số đường dẫn thư mục (path).', 400);
-        }
-
-        @ini_set('max_execution_time', '300'); // 5 minutes
-        @ini_set('memory_limit', '1024M');    // 1 GB (consider user feedback if this is too low/high)
-
-        $path_info = validate_source_and_path($folder_to_zip);
-        if ($path_info === null || $path_info['is_root']) {
-             http_response_code(400); die("Lỗi: Đường dẫn thư mục không hợp lệ hoặc không thể tải thư mục gốc.");
-        }
-
-        $source_prefixed_path = $path_info['source_prefixed_path'];
-        $absolute_path_to_zip = $path_info['absolute_path'];
-
-        if (!is_dir($absolute_path_to_zip)) {
-            http_response_code(500); die("Lỗi: Đường dẫn hợp lệ nhưng không phải là thư mục.");
-        }
-
-        // Access Check
-        $access = check_folder_access($source_prefixed_path);
-        if (!$access['authorized']) {
-            $code = $access['password_required'] ? 401 : 403;
-            $msg = $access['password_required'] ? "Yêu cầu xác thực để tải thư mục này." : ($access['error'] ?? 'Không được phép truy cập thư mục này.');
-            http_response_code($code); die("Lỗi ({$code}): " . htmlspecialchars($msg));
-        }
-
-        // Check Zip Extension
-        if (!extension_loaded('zip')) {
-            http_response_code(501); die("Lỗi: Tính năng nén file ZIP chưa được kích hoạt trên server.");
-        }
-
-        // Increment Download Count
-        try {
-            $sql = "INSERT INTO folder_stats (folder_name, downloads) VALUES (?, 1)
-                    ON CONFLICT(folder_name) DO UPDATE SET downloads = downloads + 1";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([$source_prefixed_path]);
-        } catch (PDOException $e) { /* Log warning */ error_log("[download_zip Stats] DB Error for '{$source_prefixed_path}': " . $e->getMessage()); }
-
-        // Create Zip
-        $zip = new ZipArchive();
-        $zip_basename = basename($source_prefixed_path); // Use last part of source-prefixed path
-        $zip_filename = preg_replace('/[^a-zA-Z0-9_-]+/', '_', $zip_basename) . '.zip';
-        $temp_zip_file = tempnam(sys_get_temp_dir(), 'guustudio_zip_');
-
-        if ($temp_zip_file === false || $zip->open($temp_zip_file, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE) {
-            if ($temp_zip_file && file_exists($temp_zip_file)) @unlink($temp_zip_file);
-            http_response_code(500); die("Lỗi: Không thể tạo hoặc mở file nén tạm.");
-        }
-
-        $files_added_count = 0;
-        try {
-             // Use RecursiveIteratorIterator to get all files recursively
-             $iterator = new RecursiveIteratorIterator(
-                 new RecursiveDirectoryIterator($absolute_path_to_zip, RecursiveDirectoryIterator::SKIP_DOTS), 
-                 RecursiveIteratorIterator::LEAVES_ONLY
-             );
-            foreach ($iterator as $file) {
-                if (!$file->isDir()) {
-                    $filePath = $file->getRealPath();
-                    $relativePath = substr($filePath, strlen($absolute_path_to_zip) + 1);
-                    if ($zip->addFile($filePath, $relativePath)) {
-                        $files_added_count++;
-                    } else {
-                        error_log("[download_zip AddFile] Warning: Failed to add {$filePath}");
-                    }
-                }
-            }
-        } catch(Exception $e) {
-             $zip->close();
-             @unlink($temp_zip_file);
-             error_log("[download_zip Iterator] Error: " . $e->getMessage());
-             http_response_code(500); die("Lỗi: Đã xảy ra lỗi khi duyệt file để nén.");
-        }
-
-        $status = $zip->close();
-        if ($status === false) {
-            @unlink($temp_zip_file);
-            http_response_code(500); die("Lỗi: Không thể hoàn tất file nén.");
-        }
-
-        // Send File
-        if ($files_added_count > 0 && file_exists($temp_zip_file)) {
-            if (ob_get_level()) ob_end_clean(); // Clear output buffer before headers
-            header('Content-Type: application/zip');
-            header('Content-Disposition: attachment; filename="' . $zip_filename . '"');
-            header('Content-Length: ' . filesize($temp_zip_file));
-            header('Pragma: no-cache'); header('Expires: 0'); header('Cache-Control: must-revalidate');
-
-            $readfile_result = readfile($temp_zip_file);
-            unlink($temp_zip_file);
-
-            if ($readfile_result === false) {
-                 error_log("[download_zip SendFile] readfile() failed for: {$temp_zip_file}");
-                 // Cannot send further output here
-            }
-            exit;
-        } else {
-            @unlink($temp_zip_file);
-            http_response_code(404); die("Lỗi: Không có file nào hợp lệ trong thư mục để nén.");
-        }
-        break;
-
     case 'authenticate': // Public action to authorize a protected folder
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             json_error('Phương thức không hợp lệ.', 405);
@@ -561,7 +694,5 @@ switch ($action) {
         break;
 
     default:
-        // Only fall through if no public action matched
-        // Let api.php handle admin actions or the final unknown action error
-        break;
+        json_error('Hành động không hợp lệ.', 400);
 } 

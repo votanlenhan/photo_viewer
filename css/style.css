@@ -949,245 +949,6 @@ main.container {
     border-color: rgba(210, 153, 34, 0.3);
 }
 
-/* Admin Table */
-.admin-view table { 
-    width: 100%;
-    border-collapse: collapse; 
-    margin-top: 25px;
-    font-size: 0.95em;
-}
-.admin-view th, 
-.admin-view td {
-    padding: 12px 15px; 
-    border: 1px solid #30363d; 
-    text-align: left;
-    vertical-align: middle; 
-    color: #c9d1d9; 
-}
-.admin-view th {
-    background-color: #161b22; 
-    color: #f0f6fc; 
-    font-weight: 600; 
-}
-.admin-view .status-protected { 
-    color: #3fb950; 
-    font-weight: bold; 
-}
-.admin-view .status-unprotected { 
-    color: #8b949e; 
-}
-
-/* Inputs/Forms inside table */
-.admin-view td input[type="text"].share-link-input { /* Target share link input specifically */
-     width: 100%; /* Make it take full width of the cell */
-     padding: 6px 8px;
-     background:#0d1117; 
-     border:1px solid #30363d; 
-     border-radius:4px;
-     color:#c9d1d9; 
-     font-size: 0.9em;
-     cursor: pointer;
-     /* Add min-width if needed, but width: 100% might be enough */
-     min-width: 150px; /* Ensure a minimum width */
-     box-sizing: border-box; /* Include padding in width calculation */
-}
-.admin-view td .action-form { 
-    display: flex;
-    align-items: center;
-    gap: 8px; 
-}
-.admin-view td .action-form input[type="password"] {
-    flex-grow: 1; 
-    padding: 8px 10px;
-    background:#0d1117; 
-    border:1px solid #30363d; 
-    border-radius:4px;
-    color:#c9d1d9; 
-    font-size: 0.9em;
-}
-.admin-view td .action-form input:focus {
-    outline: none; 
-    border-color: #58a6ff;
-    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
-}
-.admin-view td .action-form button {
-    padding: 7px 12px;
-    font-size: 0.9em;
-    white-space: nowrap; 
-    flex-shrink: 0; 
-}
-.admin-view .set-button { 
-    background-color: #1f6feb; 
-    border-color: #388bfd; 
-}
-.admin-view .set-button:hover { 
-    background-color: #388bfd; 
-    border-color: #58a6ff; 
-}
-.admin-view .remove-button { 
-    background-color: #b62324; 
-    border-color: #cb2a2a; 
-}
-.admin-view .remove-button:hover { 
-    background-color: #da3633; 
-    border-color: #e9403c; 
-}
-
-/* Loading/Empty Table Row */
-.admin-view #folder-list-body td[colspan="6"] { /* Adjusted colspan */
-    text-align: center; 
-    color: #8b949e; 
-    padding: 30px; 
-    font-style: italic;
-}
-
-/* Responsive Admin Styles */
-@media (max-width: 768px) { 
-    .admin-view th, 
-    .admin-view td { 
-        padding: 8px 10px; 
-        font-size: 0.9em;
-    }
-    .admin-view td .action-form { 
-        flex-direction: column; 
-        align-items: stretch; 
-        gap: 5px;
-    }
-    .admin-view td .action-form input[type="password"] { 
-        width: 100%; 
-    }
-    .admin-view td .action-form button { 
-        width: 100%; 
-    }
-    .admin-view .header { 
-        flex-direction: column; 
-        align-items: flex-start; 
-        gap: 10px;
-    }
-    .admin-view .logout-link { 
-        align-self: flex-end; 
-    }
-}
-/* PhotoSwipe Download Button Style */
-.pswp__button--download-button {
-    background: none !important; /* Remove default background if needed */
-}
-
-.pswp__button--download-button svg {
-    /* Style the SVG icon */
-    fill: #FFF; /* White icon color */
-    width: 24px; /* Adjust size as needed */
-    height: 24px;
-    position: relative;
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-/* Optional: Hover effect */
-.pswp__button--download-button:hover svg {
-    fill: #DDD; /* Lighter gray on hover */
-}
-
-/* --- Image View Header Actions --- */
-.image-view-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    position: relative; /* Needed for absolute positioning of the dropdown menu */
-}
-
-/* --- Dropdown Menu for Mobile Actions --- */
-.more-actions-menu {
-    display: none; /* Hidden by default */
-    position: absolute;
-    top: 100%; /* Position below the button */
-    right: 0; /* Align to the right */
-    background-color: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z-index: 100; /* Ensure it's above other elements in the header */
-    min-width: 180px; /* Minimum width */
-    padding: 8px 0; /* Padding top/bottom */
-}
-
-.more-actions-menu.menu-visible {
-    display: block; /* Show the menu */
-}
-
-.menu-item-button {
-    display: block;
-    width: 100%;
-    padding: 10px 15px;
-    background: none;
-    border: none;
-    color: #c9d1d9;
-    text-align: left;
-    font-size: 0.95em;
-    cursor: pointer;
-    white-space: nowrap;
-}
-
-.menu-item-button:hover {
-    background-color: #21262d;
-    color: #f0f6fc;
-}
-
-/* --- Responsive Visibility for Header Actions --- */
-/* Hide original buttons and show "more" button on smaller screens */
-@media (max-width: 768px) { /* Adjust breakpoint if needed */
-    .desktop-only-button {
-        display: none !important; /* Hide original buttons */
-    }
-    .mobile-only-button {
-        display: inline-block !important; /* Show the "more" button */
-        padding: 6px 10px; /* Adjust padding for icon button */
-        line-height: 1; /* Ensure icon fits */
-    }
-     /* Adjust header actions alignment on mobile if needed */
-     /* .image-view-actions { justify-content: flex-end; } */
-}
-
-/* Hide "more" button on larger screens (redundant but explicit) */
-@media (min-width: 769px) { /* Adjust breakpoint to match above + 1 */
-     .mobile-only-button {
-        display: none !important;
-    }
-}
-
-/* Style for the content wrapper inside directory item link */
-.directory-item-content {
-    display: flex; /* Use flex to align icon and text */
-    align-items: center; /* Vertically align icon and text */
-    overflow: hidden; /* Prevent content from overflowing its container */
-    flex-grow: 1; /* Allow content wrapper to take available space */
-    font-weight: 500; /* Reverted weight */
-}
-
-/* Ensure the text span allows wrapping */
-.directory-item-content > span:last-child { /* Target the text span specifically */
-    white-space: normal; /* Allow text to wrap */
-    overflow: visible; /* Remove overflow hidden */
-    text-overflow: clip; /* Remove ellipsis */
-    /* flex-grow: 1; /* Removed, let it size naturally */
-    line-height: 1.4; /* Ensure consistent line height for wrapping */
-    /* Optional: Add a max-width if needed, but wrapping should handle it */
-}
-
-.lock-icon {
-    font-size: 0.9em; 
-    flex-shrink: 0; 
-    display: inline-block; 
-    min-width: 20px; 
-    text-align: center; 
-    margin-right: 6px; /* Keep margin for spacing */
-}
-
-/* Optional: Style locked/unlocked icons differently if desired */
-.lock-icon.locked { /* Styles for locked icon */ }
-.lock-icon.unlocked { /* Styles for unlocked icon */ }
-
-/* Cache Status Indicators */
 .admin-view td[data-label="Trạng thái Cache"] div { 
     font-size: 0.85em;
     line-height: 1.3;
@@ -1512,4 +1273,194 @@ main.container {
     .admin-view table td[data-label="Trạng thái Cache"] .cache-progress-bar {
          height: 6px; /* Slightly thinner on mobile */
     }
+}
+
+/* --- ZIP Progress Bar --- */
+.zip-progress-bar-container {
+    display: none; /* Hidden by default, shown by JS */
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: #22272e; /* Dark background, similar to GitHub's dark header/footer */
+    color: #c9d1d9; /* Light text color */
+    padding: 8px 15px;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.2);
+    z-index: 1050; /* Ensure it's above most other content but below critical modals if any */
+    font-size: 0.9em;
+    /* Use flex to layout children */
+    display: flex; /* Changed from 'none' initially to flex for direct children layout */
+    align-items: center; 
+    gap: 15px; /* Space between children */
+}
+
+/* Initially hide the container via a separate class or inline style as before, and JS toggles this or a 'show' class */
+.zip-progress-bar-container.hidden {
+    display: none;
+}
+
+.zip-progress-bar-container p {
+    margin: 0;
+    flex-shrink: 1; /* Allow text to shrink if needed */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.zip-progress-bar-container .zip-folder-info {
+    min-width: 150px; /* Give it some minimum width */
+}
+
+.zip-progress-bar-container .zip-folder-name {
+    font-weight: bold;
+}
+
+.zip-progress-bar-container progress#zip-overall-progress {
+    flex-grow: 1; /* Allow progress bar to take available space */
+    /* width: 100%; */ /* Let flex-grow handle it */
+    height: 12px; /* Slightly taller */
+    border-radius: 6px;
+    border: 1px solid #373b41;
+}
+
+/* Styling for progress bar track */
+.zip-progress-bar-container progress#zip-overall-progress::-webkit-progress-bar {
+    background-color: #1c2128;
+    border-radius: 6px;
+}
+.zip-progress-bar-container progress#zip-overall-progress::-moz-progress-bar {
+    background-color: #1c2128;
+    border-radius: 6px;
+}
+
+/* Styling for progress bar value */
+.zip-progress-bar-container progress#zip-overall-progress::-webkit-progress-value {
+    background-color: #388bfd; /* GitHub's primary button blue */
+    border-radius: 5px; /* Slightly smaller radius than the bar itself for inset look */
+    transition: width 0.2s ease-out;
+}
+.zip-progress-bar-container progress#zip-overall-progress::-moz-progress-bar { /* For Firefox */
+    background-color: #388bfd;
+    border-radius: 5px;
+    transition: width 0.2s ease-out;
+}
+
+.zip-progress-bar-container .zip-progress-stats {
+    flex-shrink: 0; /* Prevent stats from shrinking */
+    min-width: 100px; /* Min width for stats */
+    text-align: right;
+}
+
+.zip-progress-bar-container .zip-progress-cancel-btn {
+    background-color: transparent;
+    color: #f85149; /* GitHub's danger color */
+    border: none;
+    padding: 0 5px;
+    cursor: pointer;
+    font-size: 1.5em; /* Make icon/text a bit larger */
+    line-height: 1;
+    flex-shrink: 0;
+}
+.zip-progress-bar-container .zip-progress-cancel-btn:hover {
+    color: #da3633;
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+    .zip-progress-bar-container {
+        padding: 8px 10px;
+        gap: 10px;
+    }
+    .zip-progress-bar-container .zip-folder-info {
+        /* On small screens, hide folder name to save space, show only generic message or hide this p */
+        min-width: auto;
+        /* Consider hiding or significantly shortening this text on very small screens */
+    }
+    .zip-progress-bar-container p {
+        font-size: 0.85em;
+    }
+    .zip-progress-bar-container .zip-progress-stats {
+        min-width: 70px; /* Adjust for smaller screens */
+        font-size: 0.85em;
+    }
+    /* Example: Hide folder name part on very small screens if needed */
+    /* @media (max-width: 400px) { 
+        .zip-progress-bar-container .zip-folder-info .zip-folder-name {
+            display: none; 
+        }
+    } */
+}
+
+/* --- Generic Modal Box Enhancements & ZIP Completion Modal --- */
+.modal-box.generic-message-box .modal-content-area p {
+    margin-bottom: 12px; /* Increased spacing for readability */
+    line-height: 1.6;
+    font-size: 0.95em;
+}
+
+.modal-box.generic-message-box .modal-content-area p strong {
+    color: #c9d1d9; /* Brighter color for strong text */
+}
+
+.modal-box.generic-message-box .prompt-actions {
+    margin-top: 25px; 
+    display: flex;
+    flex-direction: column; /* Stack buttons vertically */
+    gap: 12px; /* Space between stacked buttons */
+}
+
+/* Download button inside the success modal */
+.modal-box.generic-message-box .download-all-modal-button {
+    display: block; 
+    width: 100%; /* Make button full width */
+    background-color: #238636; 
+    border: 1px solid #2ea043; 
+    color: #ffffff;
+    padding: 11px 18px; 
+    font-size: 1em; 
+    font-weight: 500;
+    line-height: 1.5;
+    border-radius: 6px;
+    text-align: center;
+    text-decoration: none;
+    transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+}
+.modal-box.generic-message-box .download-all-modal-button:hover {
+    background-color: #2ea043; 
+    border-color: #3fb950; 
+    color: #ffffff;
+    text-decoration: none;
+}
+
+/* "Close" button (modalOkBtn) in the generic message box */
+.modal-box.generic-message-box .prompt-actions button#modalOkBtn {
+    background-color: #30363d; 
+    border-color: #484f58;
+    color: #c9d1d9;
+    padding: 10px 18px; /* Consistent padding */
+    font-size: 0.95em;
+    font-weight: 500;
+    width: 100%; /* Make button full width */
+    /* Inherits .button styles for border-radius, etc. */
+}
+.modal-box.generic-message-box .prompt-actions button#modalOkBtn:hover {
+    background-color: #404854;
+    border-color: #606870;
+}
+
+/* Ensure the modal box itself has a decent max-width */
+.modal-box.generic-message-box {
+    max-width: 450px; /* Max width for these informational modals */
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4); /* Slightly more pronounced shadow */
+}
+
+/* Optional: Specific styling for error button if we use .error-button-style */
+.modal-box.generic-message-box .prompt-actions button#modalOkBtn.error-button-style {
+    background-color: #b62324; /* Example error color */
+    border-color: #cb2a2a;
+    color: #ffffff;
+}
+.modal-box.generic-message-box .prompt-actions button#modalOkBtn.error-button-style:hover {
+    background-color: #da3633;
+    border-color: #e9403c;
 }

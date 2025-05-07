@@ -104,7 +104,7 @@ $options = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // Throw exceptions on error
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,       // Fetch associative arrays by default
     PDO::ATTR_EMULATE_PREPARES   => false,                  // Use native prepared statements
-    PDO::ATTR_TIMEOUT => 15 // Increased timeout to 15 seconds
+    PDO::ATTR_TIMEOUT => 20 // Increased timeout to 20 seconds (was 15)
 ];
 
 // --- Establish Connection ---
@@ -174,6 +174,37 @@ try {
         // Tạo index cho status và folder_path để tăng tốc truy vấn của worker và API
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cache_jobs_status ON cache_jobs (status)");
         $pdo->exec("CREATE INDEX IF NOT EXISTS idx_cache_jobs_folder_path ON cache_jobs (folder_path)");
+
+        // +++ Create zip_jobs table +++
+        $pdo->exec("CREATE TABLE IF NOT EXISTS zip_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_path TEXT NOT NULL,
+            job_token TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'pending', -- pending, processing, completed, failed
+            total_files INTEGER DEFAULT 0,
+            processed_files INTEGER DEFAULT 0,
+            current_file_processing TEXT,
+            zip_filename TEXT,
+            zip_filesize INTEGER DEFAULT 0,
+            error_message TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )");
+        // Create indexes for zip_jobs
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_zip_jobs_status ON zip_jobs (status)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_zip_jobs_job_token ON zip_jobs (job_token)");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_zip_jobs_source_path ON zip_jobs (source_path)"); // For API check
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_zip_jobs_created_at ON zip_jobs (created_at)");
+
+        // Add finished_at column to zip_jobs if it doesn't exist (added later)
+        $stmt = $pdo->query("PRAGMA table_info(zip_jobs)");
+        $columns = $stmt->fetchAll(PDO::FETCH_COLUMN, 1); // Fetch all column names
+        if (!in_array('finished_at', $columns)) {
+            $pdo->exec("ALTER TABLE zip_jobs ADD COLUMN finished_at DATETIME");
+            error_log("[DB Connect] Added 'finished_at' column to 'zip_jobs' table.");
+        }
+
+        // +++ End create zip_jobs table +++
 
         // +++ Add last_cached_fully_at column if it doesn't exist (SQLite specific) +++
         try {

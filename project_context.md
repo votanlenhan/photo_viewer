@@ -115,6 +115,39 @@
 
 ## Thay đổi gần đây (Latest Changes)
 
+*   **2025-05-07 (Bạn & AI):**
+        *   **Triển khai chức năng tạo ZIP bất đồng bộ:**
+            *   Tạo script worker chạy nền (`worker_zip.php`) để xử lý các yêu cầu tạo file ZIP.
+            *   Xây dựng các API endpoints mới trong `api/actions_public.php` (`request_zip`, `get_zip_status`, `download_final_zip`) để quản lý và theo dõi tiến trình.
+            *   Thêm bảng `zip_jobs` vào SQLite để lưu trữ và quản lý hàng đợi các công việc tạo ZIP, với cơ chế tự động tạo bảng trong `db_connect.php`.
+            *   Cập nhật giao diện người dùng (`index.php`, `js/app.js`) để hiển thị thông báo, thanh tiến trình, và link tải về cho file ZIP.
+        *   **Gỡ lỗi và Tối ưu hóa chuyên sâu chức năng ZIP:**
+            *   Khắc phục lỗi tràn bộ nhớ (memory exhaustion) khi tải các file ZIP dung lượng lớn bằng cách triển khai cơ chế đọc và gửi file theo từng chunk nhỏ trong action `download_final_zip`.
+            *   Giải quyết các vấn đề liên quan đến đường dẫn file không nhất quán (`realpath failed`) giữa worker và API, đảm bảo file ZIP được lưu và đọc đúng vị trí.
+            *   Cải thiện độ chính xác và tần suất cập nhật của thanh tiến trình ZIP bằng cách tối ưu logic ghi vào CSDL trong `worker_zip.php` và logic polling/hiển thị trong `js/app.js`.
+            *   Giải quyết triệt để các lỗi "database is locked" xảy ra do tranh chấp tài nguyên:
+                *   Thêm cơ chế thử lại (retry mechanism) cho các câu lệnh cập nhật CSDL quan trọng trong worker.
+                *   Tăng giá trị `PDO::ATTR_TIMEOUT` trong `db_connect.php`.
+                *   Tinh chỉnh logic API (`request_zip`) để xử lý các job đã tồn tại một cách hiệu quả hơn.
+                *   Cải thiện logic của worker để nhận diện và bỏ qua các job "stale" (đã được xử lý hoặc không còn hợp lệ).
+                *   Xác định và giải quyết nguyên nhân gốc rễ của các job "ma" (ví dụ: Job 3) bằng cách đảm bảo chỉ có một tiến trình worker duy nhất đang chạy và thêm logging chi tiết để theo dõi.
+                *   Sửa lỗi CSDL "no such column: finished_at" bằng cách tự động thêm cột `finished_at` vào bảng `zip_jobs` thông qua `db_connect.php` và đảm bảo worker cập nhật cột này khi job hoàn thành.
+            *   Hệ thống tạo ZIP bất đồng bộ hiện tại được xem là hoạt động ổn định.
+
+        *   **Cải thiện UI/UX cho tiến trình tạo và hoàn thành ZIP (07-May-2025):**
+            *   Thay thế khu vực hiển thị tiến trình ZIP cũ bằng một thanh tiến trình mới, cố định ở cuối màn hình (sticky footer progress bar).
+            *   Thanh tiến trình mới hiển thị tên thư mục đang được nén, một thanh progress trực quan, và thông tin số file đã xử lý/tổng số file cùng tỷ lệ phần trăm.
+            *   Khi quá trình tạo ZIP hoàn thành hoặc thất bại, một modal thông báo sẽ được hiển thị (sử dụng lại và tùy chỉnh hệ thống modal chung của ứng dụng để đảm bảo tính đồng nhất).
+            *   Giao diện của modal hoàn thành ZIP được tinh chỉnh: nút "Tải về ngay" và "Đóng" được bố trí lại theo chiều dọc, loại bỏ thông tin tên file đầy đủ khỏi modal để tránh tràn chữ và giữ giao diện gọn gàng.
+            *   Khắc phục một số lỗi JavaScript liên quan đến phạm vi biến (ví dụ: `getCurrentFolderInfo`, `generalModalOverlay`) và thứ tự định nghĩa hàm (`showModalWithMessage`) để đảm bảo các thành phần này hoạt động chính xác.
+            *   Cải thiện logic của hàm `pollZipStatus` để xử lý các cấu trúc phản hồi API linh hoạt hơn, giúp cập nhật trạng thái tiến trình ZIP chính xác hơn.
+
+        *   **Cập nhật tài liệu hướng dẫn triển khai (07-May-2025):**
+            *   Chỉnh sửa và hoàn thiện file `README.md` với hướng dẫn chi tiết về cách triển khai các script worker (`worker_cache.php`, `worker_zip.php`) và các tác vụ dọn dẹp định kỳ (`cron_cache_manager.php`, `cron_log_cleaner.php`) trên môi trường server sản xuất chạy Windows với XAMPP.
+            *   Nội dung cập nhật tập trung vào việc sử dụng Windows Task Scheduler để quản lý các tiến trình này, các lưu ý quan trọng về cấu hình PHP CLI, đường dẫn tuyệt đối trong `config.php`, cơ chế lock file cho worker, và quyền truy cập file/thư mục cần thiết trên Windows.
+            *   Các hướng dẫn triển khai cho môi trường Linux (supervisor, systemd) đã được rút gọn hoặc loại bỏ để tập trung vào kịch bản Windows/XAMPP.
+            *   Cập nhật phần khởi tạo CSDL trong `README.md` để bao gồm bảng `zip_jobs`.
+
 *   **2025-05-06 (Bạn & AI):**
     *   Thêm cơ chế theo dõi tiến trình cache real-time vào trang Admin:
         *   Mở rộng bảng `cache_jobs` để lưu `total_files`, `processed_files`, `current_file_processing`.
@@ -130,4 +163,15 @@
     *   Fix logic API (`api/actions_admin.php`) để lấy thông tin cache job chính xác cho từng thư mục, giải quyết lỗi hiển thị "Không rõ số lượng".
     *   Thêm bước kiểm tra an toàn vào script dọn dẹp cache (`cron_cache_manager.php`) để ngăn việc xóa toàn bộ cache khi không tìm thấy ảnh gốc.
 *   **Trước đó:**
-    *   Thêm cột `image_count` vào DB, sửa worker để lưu số lượng ảnh cache. 
+    *   Thêm cột `image_count` vào DB, sửa worker để lưu số lượng ảnh cache.
+
+## 8. Kiểm thử End-to-End (Playwright)
+
+*   **Trạng thái:** Đang triển khai.
+*   **Cài đặt:** Playwright đã được cài đặt và cấu hình (`package.json`, `playwright.config.ts`, `tests/`). `.gitignore` đã được cập nhật.
+*   **Tệp kiểm thử:** `tests/gallery.spec.ts` chứa các nhóm kiểm thử cho Admin Login, Public Gallery, và Admin Panel.
+*   **Kết quả:**
+    *   **PASSED:** Đăng nhập Admin, Hiển thị danh sách thư mục gốc (Public), Hiển thị danh sách thư mục (Admin).
+    *   **FAILED:** Điều hướng vào thư mục và hiển thị thumbnail (Public), Mở ảnh trong PhotoSwipe (Public). Nguyên nhân gốc rễ là thumbnail trong `#image-grid` không xuất hiện sau khi điều hướng vào thư mục, nghi ngờ lỗi API hoặc lỗi render JS.
+    *   **TODO:** Các kiểm thử chức năng admin khác (mật khẩu, cache), các kiểm thử public khác (tìm kiếm, ZIP, v.v.).
+*   **Gỡ lỗi:** Đã thực hiện nhiều bước gỡ lỗi (thêm chờ, sửa selector, ưu tiên `data-dir`, kiểm tra cấu trúc HTML) nhưng vấn đề thumbnail chưa được giải quyết. Việc gỡ lỗi đang tạm dừng. 
