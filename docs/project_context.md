@@ -102,7 +102,10 @@
     *   **Tối ưu Tạo ZIP:** Sử dụng background job hoặc streaming.
     *   **Tối ưu Liệt kê Ảnh (`list_files`):**
         *   **Vấn đề hiện tại:** Action `list_files` trong `api/actions_public.php` gọi hàm `@getimagesize()` cho mỗi tệp ảnh trong một thư mục để lấy kích thước (width, height). Thao tác này có thể tốn nhiều thời gian và tài nguyên I/O, đặc biệt với các thư mục chứa hàng trăm hoặc hàng nghìn ảnh, làm chậm thời gian phản hồi của API.
-        *   **Đề xuất:** Cache kích thước ảnh (ví dụ: lưu vào CSDL khi ảnh được quét lần đầu hoặc khi thumbnail được tạo), cân nhắc phân trang phía server hiệu quả hơn.
+        *   **Đề xuất:** 
+            *   Cache kích thước ảnh (ví dụ: lưu vào CSDL khi ảnh được quét lần đầu hoặc khi thumbnail được tạo).
+            *   **QUAN TRỌNG:** Đảm bảo API (`list_files` hoặc action tương đương) **luôn trả về kích thước gốc (width, height) của mỗi ảnh**. Thông tin này rất cần thiết để PhotoSwipe 5 hoạt động chính xác và ổn định (hiện tại `photoswipeHandler.js` đang nhận giá trị `0` nếu thiếu).
+            *   Cân nhắc phân trang phía server hiệu quả hơn.
 *   **Cải thiện UX/UI:**
     *   **Hiệu ứng Skeleton Loading:** Thay thế text "Đang tải..." bằng hiệu ứng khung xương.
     *   **Cải thiện Tìm kiếm:** Thêm gợi ý (autocomplete), làm nổi bật kết quả.
@@ -181,112 +184,21 @@
 
 ## 8. Kiểm thử End-to-End (Playwright)
 
-*   **Trạng thái:** Đang triển khai.
+*   **Trạng thái:** **Hoạt động ổn định.**
 *   **Cài đặt:** Playwright đã được cài đặt và cấu hình (`package.json`, `playwright.config.ts`, `tests/`). `.gitignore` đã được cập nhật.
 *   **Tệp kiểm thử:** `tests/gallery.spec.ts` chứa các nhóm kiểm thử cho Admin Login, Public Gallery, và Admin Panel.
-*   **Kết quả:**
-    *   **PASSED:** Đăng nhập Admin, Hiển thị danh sách thư mục gốc (Public), Hiển thị danh sách thư mục (Admin).
-    *   **FAILED:** Điều hướng vào thư mục và hiển thị thumbnail (Public), Mở ảnh trong PhotoSwipe (Public). Nguyên nhân gốc rễ là thumbnail trong `#image-grid` không xuất hiện sau khi điều hướng vào thư mục, nghi ngờ lỗi API hoặc lỗi render JS.
-    *   **TODO:** Các kiểm thử chức năng admin khác (mật khẩu, cache), các kiểm thử public khác (tìm kiếm, ZIP, v.v.).
-*   **Gỡ lỗi:** Đã thực hiện nhiều bước gỡ lỗi (thêm chờ, sửa selector, ưu tiên `data-dir`, kiểm tra cấu trúc HTML) nhưng vấn đề thumbnail chưa được giải quyết. Việc gỡ lỗi đang tạm dừng.
+*   **Kết quả:** 
+    *   **PASSED (Tất cả):** Tất cả các kiểm thử hiện có trong `tests/gallery.spec.ts` (bao gồm Đăng nhập Admin, Duyệt thư mục gốc, Điều hướng vào thư mục con, Hiển thị thumbnail, Mở ảnh trong PhotoSwipe, Hiển thị danh sách thư mục Admin) đều đã thành công trên các trình duyệt (Chromium, Firefox, Webkit).
+    *   **TODO:** Bổ sung các kiểm thử chi tiết hơn cho các chức năng admin khác (đặt/xóa mật khẩu, yêu cầu cache) và các chức năng public khác (tìm kiếm, tải ZIP, xác thực mật khẩu thư mục, v.v.).
+*   **Gỡ lỗi:** Các vấn đề trước đây liên quan đến việc điều hướng vào thư mục con và tìm trigger của PhotoSwipe đã được giải quyết bằng cách sửa bộ chọn trong test và điều chỉnh cấu trúc HTML/sự kiện click trong `js/uiImageView.js`.
 
 *   **08-May-2025 (Bạn & AI):**
     *   **Tái cấu trúc `js/app.js` thành các module nhỏ hơn:**
         *   `js/app.js` được giữ lại làm điểm khởi tạo và điều phối chính.
         *   Các chức năng cụ thể được tách ra thành các module JavaScript riêng biệt trong thư mục `js/` để cải thiện khả năng bảo trì và tổ chức code: `apiService.js` (tương tác API), `config.js` (cấu hình client), `photoswipeHandler.js` (PhotoSwipe), `state.js` (trạng thái ứng dụng), `uiDirectoryView.js` (UI xem thư mục), `uiImageView.js` (UI xem ảnh), `uiModal.js` (quản lý modal), `utils.js` (hàm tiện ích), và `zipManager.js` (quản lý ZIP).
         *   Sửa lỗi logic xác thực mật khẩu trong `js/uiModal.js` sau khi tái cấu trúc, đảm bảo kiểm tra đúng trường `success` từ phản hồi API thay vì `authorized`.
-
-## 6. Các Cải tiến & Tối ưu Tiềm năng trong Tương lai
-
-*   **Tối ưu Hiệu suất (Ưu tiên cao):**
-    *   **Tạo Thumbnail trước:** Tạo sẵn thumbnail thay vì tạo động qua API.
-    *   **Tối ưu Tạo ZIP:** Sử dụng background job hoặc streaming.
-    *   **Tối ưu Liệt kê Ảnh (`list_files`):**
-        *   **Vấn đề hiện tại:** Action `list_files` trong `api/actions_public.php` gọi hàm `@getimagesize()` cho mỗi tệp ảnh trong một thư mục để lấy kích thước (width, height). Thao tác này có thể tốn nhiều thời gian và tài nguyên I/O, đặc biệt với các thư mục chứa hàng trăm hoặc hàng nghìn ảnh, làm chậm thời gian phản hồi của API.
-        *   **Đề xuất:** Cache kích thước ảnh (ví dụ: lưu vào CSDL khi ảnh được quét lần đầu hoặc khi thumbnail được tạo), cân nhắc phân trang phía server hiệu quả hơn.
-*   **Cải thiện UX/UI:**
-    *   **Hiệu ứng Skeleton Loading:** Thay thế text "Đang tải..." bằng hiệu ứng khung xương.
-    *   **Cải thiện Tìm kiếm:** Thêm gợi ý (autocomplete), làm nổi bật kết quả.
-    *   **Xử lý Lỗi Tốt hơn:** Hiển thị thông báo lỗi thân thiện hơn.
-    *   **Tinh chỉnh Font chữ:** Xem xét lại font web nếu cần.
-    *   **Kiểm tra Khả năng Tiếp cận (Accessibility - a11y):** Đảm bảo tuân thủ các tiêu chuẩn a11y.
-*   **Chất lượng Mã nguồn & Khả năng Bảo trì:**
-    *   **Biến CSS:** Sử dụng biến CSS cho màu sắc, font, khoảng cách.
-    *   **Modular hóa Code:** Chia nhỏ file CSS/JS khi dự án lớn hơn.
-    *   **Kiểm thử (Testing):** Thêm unit/integration test cho backend.
-*   **Tính năng Mới Tiềm năng:**
-    *   Sắp xếp/lọc album/ảnh.
-    *   Chế độ xem danh sách.
-    *   Chia sẻ/tải ảnh đơn lẻ.
-    *   Hiển thị metadata EXIF.
-    *   Mở rộng Trang Admin.
-
-## 7. Ghi chú & Cân nhắc Chung
-
-*   Tiếp tục tập trung vào nguyên tắc thiết kế **Mobile-First**.
-*   Đảm bảo tính nhất quán giữa môi trường phát triển (dev) và sản xuất (prod), đặc biệt về cấu hình đường dẫn trong `config.php`.
-*   Ưu tiên các **tối ưu về hiệu suất** vì chúng ảnh hưởng lớn đến trải nghiệm người dùng.
-*   Cần **kiểm thử kỹ lưỡng** tất cả chức năng sau các thay đổi.
-
-## Thay đổi gần đây (Latest Changes)
-
-*   **2025-05-07 (Bạn & AI):**
-        *   **Triển khai chức năng tạo ZIP bất đồng bộ:**
-            *   Tạo script worker chạy nền (`worker_zip.php`) để xử lý các yêu cầu tạo file ZIP.
-            *   Xây dựng các API endpoints mới trong `api/actions_public.php` (`request_zip`, `get_zip_status`, `download_final_zip`) để quản lý và theo dõi tiến trình.
-            *   Thêm bảng `zip_jobs` vào SQLite để lưu trữ và quản lý hàng đợi các công việc tạo ZIP, với cơ chế tự động tạo bảng trong `db_connect.php`.
-            *   Cập nhật giao diện người dùng (`index.php`, `js/app.js`) để hiển thị thông báo, thanh tiến trình, và link tải về cho file ZIP.
-        *   **Gỡ lỗi và Tối ưu hóa chuyên sâu chức năng ZIP:**
-            *   Khắc phục lỗi tràn bộ nhớ (memory exhaustion) khi tải các file ZIP dung lượng lớn bằng cách triển khai cơ chế đọc và gửi file theo từng chunk nhỏ trong action `download_final_zip`.
-            *   Giải quyết các vấn đề liên quan đến đường dẫn file không nhất quán (`realpath failed`) giữa worker và API, đảm bảo file ZIP được lưu và đọc đúng vị trí.
-            *   Cải thiện độ chính xác và tần suất cập nhật của thanh tiến trình ZIP bằng cách tối ưu logic ghi vào CSDL trong `worker_zip.php` và logic polling/hiển thị trong `js/app.js`.
-            *   Giải quyết triệt để các lỗi "database is locked" xảy ra do tranh chấp tài nguyên:
-                *   Thêm cơ chế thử lại (retry mechanism) cho các câu lệnh cập nhật CSDL quan trọng trong worker.
-                *   Tăng giá trị `PDO::ATTR_TIMEOUT` trong `db_connect.php`.
-                *   Tinh chỉnh logic API (`request_zip`) để xử lý các job đã tồn tại một cách hiệu quả hơn.
-                *   Cải thiện logic của worker để nhận diện và bỏ qua các job "stale" (đã được xử lý hoặc không còn hợp lệ).
-                *   Xác định và giải quyết nguyên nhân gốc rễ của các job "ma" (ví dụ: Job 3) bằng cách đảm bảo chỉ có một tiến trình worker duy nhất đang chạy và thêm logging chi tiết để theo dõi.
-                *   Sửa lỗi CSDL "no such column: finished_at" bằng cách tự động thêm cột `finished_at` vào bảng `zip_jobs` thông qua `db_connect.php` và đảm bảo worker cập nhật cột này khi job hoàn thành.
-                *   Hệ thống tạo ZIP bất đồng bộ hiện tại được xem là hoạt động ổn định.
-
-        *   **Cải thiện UI/UX cho tiến trình tạo và hoàn thành ZIP (07-May-2025):**
-            *   Thay thế khu vực hiển thị tiến trình ZIP cũ bằng một thanh tiến trình mới, cố định ở cuối màn hình (sticky footer progress bar).
-            *   Thanh tiến trình mới hiển thị tên thư mục đang được nén, một thanh progress trực quan, và thông tin số file đã xử lý/tổng số file cùng tỷ lệ phần trăm.
-            *   Khi quá trình tạo ZIP hoàn thành hoặc thất bại, một modal thông báo sẽ được hiển thị (sử dụng lại và tùy chỉnh hệ thống modal chung của ứng dụng để đảm bảo tính đồng nhất).
-            *   Giao diện của modal hoàn thành ZIP được tinh chỉnh: nút "Tải về ngay" và "Đóng" được bố trí lại theo chiều dọc, loại bỏ thông tin tên file đầy đủ khỏi modal để tránh tràn chữ và giữ giao diện gọn gàng.
-            *   Khắc phục một số lỗi JavaScript liên quan đến phạm vi biến (ví dụ: `getCurrentFolderInfo`, `generalModalOverlay`) và thứ tự định nghĩa hàm (`showModalWithMessage`) để đảm bảo các thành phần này hoạt động chính xác.
-            *   Cải thiện logic của hàm `pollZipStatus` để xử lý các cấu trúc phản hồi API linh hoạt hơn, giúp cập nhật trạng thái tiến trình ZIP chính xác hơn.
-
-        *   **Cập nhật tài liệu hướng dẫn triển khai (07-May-2025):**
-            *   Chỉnh sửa và hoàn thiện file `README.md` với hướng dẫn chi tiết về cách triển khai các script worker (`worker_cache.php`, `worker_zip.php`) và các tác vụ dọn dẹp định kỳ (`cron_cache_manager.php`, `cron_log_cleaner.php`) trên môi trường server sản xuất chạy Windows với XAMPP.
-            *   Nội dung cập nhật tập trung vào việc sử dụng Windows Task Scheduler để quản lý các tiến trình này, các lưu ý quan trọng về cấu hình PHP CLI, đường dẫn tuyệt đối trong `config.php`, cơ chế lock file cho worker, và quyền truy cập file/thư mục cần thiết trên Windows.
-            *   Các hướng dẫn triển khai cho môi trường Linux (supervisor, systemd) đã được rút gọn hoặc loại bỏ để tập trung vào kịch bản Windows/XAMPP.
-            *   Cập nhật phần khởi tạo CSDL trong `README.md` để bao gồm bảng `zip_jobs`.
-
-*   **2025-05-06 (Bạn & AI):**
-    *   Thêm cơ chế theo dõi tiến trình cache real-time vào trang Admin:
-        *   Mở rộng bảng `cache_jobs` để lưu `total_files`, `processed_files`, `current_file_processing`.
-        *   Cập nhật `worker_cache.php` để đếm tổng số file, cập nhật tiến trình (số file đã xử lý, file hiện tại) vào DB trong lúc chạy.
-        *   Cập nhật API `admin_list_folders` để trả về thông tin tiến trình.
-        *   Cập nhật `js/admin.js` và `css/style.css` để hiển thị thanh tiến trình, phần trăm hoàn thành, và file đang xử lý.
-        *   Gỡ lỗi và sửa vấn đề cập nhật tiến trình cache:
-            *   Giảm tần suất ghi vào DB của worker để tránh lỗi "database is locked".
-            *   Thêm cơ chế thử lại (retry) khi gặp lỗi "database is locked".
-            *   Sửa lỗi closure trong worker khiến biến đếm `processed_files` không được cập nhật đúng cách vào DB (sử dụng tham chiếu `&`).
-        *   Dọn dẹp các log debug không cần thiết trong `worker_cache.php` sau khi sửa lỗi thành công.
-*   **2025-05-05 (Bạn & AI):**
-    *   Fix logic API (`api/actions_admin.php`) để lấy thông tin cache job chính xác cho từng thư mục, giải quyết lỗi hiển thị "Không rõ số lượng".
-    *   Thêm bước kiểm tra an toàn vào script dọn dẹp cache (`cron_cache_manager.php`) để ngăn việc xóa toàn bộ cache khi không tìm thấy ảnh gốc.
-*   **Trước đó:**
-    *   Thêm cột `image_count` vào DB, sửa worker để lưu số lượng ảnh cache.
-
-## 8. Kiểm thử End-to-End (Playwright)
-
-*   **Trạng thái:** Đang triển khai.
-*   **Cài đặt:** Playwright đã được cài đặt và cấu hình (`package.json`, `playwright.config.ts`, `tests/`). `.gitignore` đã được cập nhật.
-*   **Tệp kiểm thử:** `tests/gallery.spec.ts` chứa các nhóm kiểm thử cho Admin Login, Public Gallery, và Admin Panel.
-*   **Kết quả:**
-    *   **PASSED:** Đăng nhập Admin, Hiển thị danh sách thư mục gốc (Public), Hiển thị danh sách thư mục (Admin).
-    *   **FAILED:** Điều hướng vào thư mục và hiển thị thumbnail (Public), Mở ảnh trong PhotoSwipe (Public). Nguyên nhân gốc rễ là thumbnail trong `#image-grid` không xuất hiện sau khi điều hướng vào thư mục, nghi ngờ lỗi API hoặc lỗi render JS.
-    *   **TODO:** Các kiểm thử chức năng admin khác (mật khẩu, cache), các kiểm thử public khác (tìm kiếm, ZIP, v.v.).
-*   **Gỡ lỗi:** Đã thực hiện nhiều bước gỡ lỗi (thêm chờ, sửa selector, ưu tiên `data-dir`, kiểm tra cấu trúc HTML) nhưng vấn đề thumbnail chưa được giải quyết. Việc gỡ lỗi đang tạm dừng. 
+    *   **Sửa lỗi và hoàn thiện Kiểm thử End-to-End (Playwright):**
+        *   Điều chỉnh các bộ chọn (selector) trong `tests/gallery.spec.ts` để phản ánh đúng cấu trúc DOM động khi điều hướng giữa thư mục cha và thư mục con (ví dụ: tìm liên kết thư mục con trong `#image-grid ul.subfolder-list` thay vì `#directory-items-container`).
+        *   Sửa đổi `js/uiImageView.js` để tạo cấu trúc HTML phù hợp cho PhotoSwipe: bọc thẻ `<img>` trong thẻ `<a>` có class `photoswipe-trigger`.
+        *   Đảm bảo sự kiện `onclick` được gắn đúng vào thẻ `<a>` để kích hoạt `appOpenPhotoSwipe`, khắc phục lỗi "kẹt ảnh" và đảm bảo tương thích với cả tương tác người dùng và kiểm thử tự động.
+        *   Kết quả: Tất cả các E2E test hiện tại trong `gallery.spec.ts` đều PASSED. 

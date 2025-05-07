@@ -73,36 +73,48 @@ export function renderImageItems(imagesDataToRender, append = false) {
     imagesDataToRender.forEach((imgData) => {
         const div = document.createElement('div');
         div.className = 'image-item';
+
+        const anchor = document.createElement('a');
+        anchor.className = 'photoswipe-trigger'; // Class for PhotoSwipe to detect
+
+        const fullImagePath = `${API_BASE_URL}?action=get_image&path=${encodeURIComponent(imgData.path)}`;
+        anchor.href = fullImagePath; // href for the anchor
+        anchor.dataset.pswpSrc = fullImagePath; // Source for PhotoSwipe
+
+        const imageIndex = currentImageList.findIndex(item => item.path === imgData.path);
+        if (imageIndex !== -1) {
+            anchor.dataset.pswpIndex = imageIndex;
+        }
+        
+        // Add back the click handler to the anchor
+        anchor.onclick = (e) => {
+            e.preventDefault(); // Prevent default anchor action
+            if (imageIndex !== -1) {
+                appOpenPhotoSwipe(imageIndex);
+            } else {
+                const fallbackIndex = currentImageList.findIndex(item => item.name === imgData.name);
+                if (fallbackIndex !== -1) {
+                    appOpenPhotoSwipe(fallbackIndex);
+                } else {
+                    console.error("Could not find image index for:", imgData.name, imgData.path);
+                }
+            }
+        };
+
         const img = document.createElement('img');
-        
-        const imageIndex = currentImageList.findIndex(item => item.path === imgData.path); // Use path for more robust indexing
-        
         const thumbSrc = `${API_BASE_URL}?action=get_thumbnail&path=${encodeURIComponent(imgData.path)}&size=750`;
 
         img.src = thumbSrc; 
         img.alt = imgData.name;
         img.loading = 'lazy';
-        if (imageIndex !== -1) {
-            img.dataset.pswpIndex = imageIndex;
-        }
 
         img.onerror = () => { 
             img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
             img.alt = 'Lỗi tải ảnh xem trước'; 
         };
 
-        img.onclick = () => {
-            if (imageIndex !== -1) {
-                appOpenPhotoSwipe(imageIndex);
-            } else {
-                // Fallback: try to find by name if path wasn't found (e.g. if currentImageList was not updated yet)
-                const fallbackIndex = currentImageList.findIndex(item => item.name === imgData.name);
-                if (fallbackIndex !== -1) appOpenPhotoSwipe(fallbackIndex);
-                else console.error("Could not find image index for:", imgData.name, imgData.path);
-            }
-        };
-
-        div.appendChild(img);
+        anchor.appendChild(img);
+        div.appendChild(anchor);
         containerToUse.appendChild(div);
     });
 }
