@@ -294,15 +294,60 @@ while ($running) {
             error_log_worker($job, "ZIP creation successful: {$zip_filepath}, Size: {$zip_filesize} bytes");
             echo_worker_status($job, "ZIP creation successful: {$zip_filepath}");
 
-            // Update DB to completed
-            $sql_complete = "UPDATE zip_jobs SET status = 'completed', zip_filename = ?, zip_filesize = ?, processed_files = total_files, current_file_processing = 'Completed', finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
-            $stmt_complete = $pdo->prepare($sql_complete);
-            if (!$stmt_complete->execute([basename($zip_filepath), $zip_filesize, $job_id])) {
-                 error_log_worker($job, "CRITICAL: Failed to mark job as 'completed' in DB. ZIP file is ready: {$zip_filepath}");
-                 echo_worker_status($job, "CRITICAL: Failed to mark job as 'completed'.");
-            } else {
-                error_log_worker($job, "Job marked as 'completed'.");
-                echo_worker_status($job, "Job marked as 'completed'.");
+            // Update DB to completed (WITH RETRY LOGIC)
+            $update_final_status_success = false;
+            $final_status_update_attempts = 0;
+            $max_final_status_update_retries = 5; // Max 5 attempts for final status update
+            $retry_final_status_delay_ms = 500;  // Start with 500ms delay, increases each attempt
+
+            while (!$update_final_status_success && $final_status_update_attempts < $max_final_status_update_retries) {
+                $final_status_update_attempts++;
+                try {
+                    $sql_complete = "UPDATE zip_jobs SET status = 'completed', zip_filename = ?, zip_filesize = ?, processed_files = total_files, current_file_processing = 'Completed', finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?";
+                    $stmt_complete = $pdo->prepare($sql_complete);
+                    
+                    if ($stmt_complete->execute([basename($zip_filepath), $zip_filesize, $job_id])) {
+                        if ($stmt_complete->rowCount() > 0) {
+                            error_log_worker($job, "Job marked as 'completed' after {$final_status_update_attempts} attempt(s).");
+                            echo_worker_status($job, "Job marked as 'completed'.");
+                            $update_final_status_success = true;
+                        } else {
+                            error_log_worker($job, "Attempt {$final_status_update_attempts}: 'completed' status update SQL execute OK, but rowCount is 0. Job ID: {$job_id}. Job might be gone or already completed by another process.");
+                            // If rowCount is 0, it implies the WHERE id = ? condition didn't match, or the status was already what we tried to set it to.
+                            // To avoid infinite loops on strange states or if another process correctly updated it, we might check current status.
+                            // For now, let this specific attempt be considered a non-fatal issue if execute was true, but we won't set $update_final_status_success = true unless rowCount > 0.
+                            // This means it will retry, and if it persists, will fail after max retries.
+                        }
+                    } else {
+                        // This case (execute() returns false but doesn't throw PDOException) is less common for SQLite with well-formed SQL.
+                        // It might indicate a more fundamental issue if it happens.
+                        error_log_worker($job, "Attempt {$final_status_update_attempts}: SQL execute returned false for 'completed' status update. Job ID: {$job_id}. Check SQLite error info if possible.");
+                    }
+                } catch (PDOException $e) {
+                    error_log_worker($job, "Attempt {$final_status_update_attempts} PDOException during 'completed' status update: " . $e->getMessage() . " (Code: " . $e->getCode() . ")");
+                    if (strpos(strtolower($e->getMessage()), 'database is locked') === false || $final_status_update_attempts >= $max_final_status_update_retries) {
+                        // If not a "database is locked" error, or if it is but we've exhausted retries, re-throw to be caught by the main job exception handler.
+                        error_log_worker($job, "Non-retriable PDOException or max retries reached for 'completed' status. Re-throwing.");
+                        throw $e; 
+                    }
+                    // If it IS a "database is locked" error and we have retries left, the loop will continue after a delay.
+                }
+
+                if (!$update_final_status_success && $final_status_update_attempts < $max_final_status_update_retries) {
+                    usleep($retry_final_status_delay_ms * 1000 * $final_status_update_attempts); // Increasing delay for subsequent retries
+                }
+            }
+
+            if (!$update_final_status_success) {
+                $critical_error_msg = "CRITICAL: Failed to mark job as 'completed' in DB after {$max_final_status_update_retries} attempts. ZIP file is ready: {$zip_filepath}. Manual DB intervention may be required for job ID {$job_id}.";
+                error_log_worker($job, $critical_error_msg);
+                echo_worker_status($job, "CRITICAL: Failed to mark job as 'completed' after multiple retries. ZIP is ready but DB status incorrect.");
+                // The job will remain in 'processing' or its last known state before this block.
+                // The main exception handler for the job will NOT be triggered if we don't re-throw an exception here.
+                // This means the job won't be marked as 'failed' by the generic handler if only this specific final update fails.
+                // This is a design choice: the ZIP is ready, so marking the whole job 'failed' might be misleading.
+                // However, the client will likely not see it as completed if it polls. 
+                // Consider if throwing new Exception("Failed to update final status to completed after retries.") is better, which would then mark job as 'failed'.
             }
 
         } else { // No job found in queue

@@ -34,7 +34,7 @@ if (!function_exists('generate_job_token')) {
 switch ($action) {
 
     case 'list_files':
-        $subdir_requested = $_GET['dir'] ?? '';
+        $subdir_requested = $_GET['path'] ?? '';
         $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
         // Use a reasonable default/configurable limit, but allow API override?
         // Let's use 100 as default to match original logic, but maybe make this configurable later.
